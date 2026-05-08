@@ -53,7 +53,7 @@ if __name__ == '__main__':
         d = data(app_id, app_key, auth_response)
         data_response = requests.get(url, headers=d.get_data_header())
     print(auth_response)
-        if data_response.status_code == 200:
+    if data_response.status_code == 200:
     bus_list = data_response.json()
     
     print(f"{'路線名稱':<8} | {'方向':<25} | {'到站狀態'}")
