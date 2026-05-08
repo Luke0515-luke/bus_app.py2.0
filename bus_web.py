@@ -2,9 +2,11 @@ import streamlit as st
 import requests
 import pandas as pd
 
-app_id = st.secrets["0515luke-ebbb2a3d-6a77-4fed"]
-app_key = st.secrets["a89c5916-ae3b-4900-bf59-a9f37e99d0dd"]
 
+app_id = st.secrets["CLIENT_ID"]
+app_key = st.secrets["CLIENT_SECRET"]
+CLIENT_ID = "0515luke-ebbb2a3d-6a77-4fed"
+CLIENT_SECRET = "a89c5916-ae3b-4900-bf59-a9f37e99d0dd"
 auth_url="https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
 url = "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/2?%24format=JSON"
 
