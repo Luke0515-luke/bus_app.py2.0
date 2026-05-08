@@ -75,6 +75,26 @@ if data_response.status_code == 200:
         else:
             status = "尚未發車"
             
-        print(f"{route_name:<10} | {sub_route:<27} | {status}")
-    print(data_response)
-    print(data_response.text)
+        if data_response.status_code == 200:
+        bus_list = data_response.json()
+        
+        # 在網頁上顯示大標題
+        st.header("🚌 公車即時動態")
+        
+        # 建立一個清單來存資料
+        final_list = []
+        for stop in bus_list:
+            route_name = stop.get('RouteName', {}).get('Zh_tw', '未知')
+            sub_route = stop.get('SubRouteName', {}).get('Zh_tw', '未知')
+            seconds = stop.get('EstimateTime')
+            status = f"{seconds // 60} 分鐘" if seconds is not None else "尚未發車"
+            
+            # 把資料存進清單
+            final_list.append({
+                "路線名稱": route_name,
+                "方向": sub_route,
+                "到站狀態": status
+            })
+        
+        # 關鍵：用 st.table 把它畫到網頁畫面上！
+        st.table(final_list)
