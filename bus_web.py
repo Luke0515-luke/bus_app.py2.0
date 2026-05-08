@@ -92,5 +92,5 @@ if __name__ == '__main__':
             else:
                 st.info("目前查無此路線的即時資訊。")
       # ... 這是你原本 if 區塊的結尾
-      except Exception as e:
-          st.error(f"發生錯誤：{e}")
+    except Exception as e:
+        st.error(f"發生錯誤：{e}")
