@@ -77,4 +77,4 @@ if data_response.status_code == 200:
             
         print(f"{route_name:<10} | {sub_route:<27} | {status}")
     print(data_response)
-    pprint(data_response.text)
+    print(data_response.text)
