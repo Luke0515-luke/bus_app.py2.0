@@ -91,3 +91,6 @@ if __name__ == '__main__':
                 st.dataframe(final_list, use_container_width=True)
             else:
                 st.info("目前查無此路線的即時資訊。")
+      # ... 這是你原本 if 區塊的結尾
+      except Exception as e:
+          st.error(f"發生錯誤：{e}")
