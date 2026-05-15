@@ -47,7 +47,7 @@ class data():
 # --- 程式執行主體 ---
 if "GEMINI_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_KEY"])
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('models/gemini-1.5-flash')
 else:
     st.error("找不到 GEMINI_KEY，請檢查 Secrets！")
 
