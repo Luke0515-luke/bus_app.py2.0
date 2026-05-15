@@ -2,13 +2,14 @@ import json
 import streamlit as st
 import requests
 import pandas as pd
+import google.generativeai as genai
 
 # 1. 從 Streamlit Secrets 讀取金鑰
 app_id = st.secrets["CLIENT_ID"]
 app_key = st.secrets["CLIENT_SECRET"]
 
 # 2. 正確的 TDX 驗證網址與公車資料網址
-auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
+auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token" 
 url = "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/2?%24format=JSON"
 
 class Auth():
@@ -41,6 +42,13 @@ class data():
 
 # --- 程式執行主體 ---
 # --- 程式執行主體 ---
+
+
+if __name__ == '__main__':
+    st.set_page_config(page_title="台南公車 AI 版", page_icon="🚌")
+    st.header("🚌 台南公車即時動態 (AI 助手版)")
+
+    #
 if __name__ == '__main__':
     # 設定網頁標題與圖示
     st.set_page_config(page_title="台南公車即時動態", page_icon="🚌")
