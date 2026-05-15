@@ -121,64 +121,7 @@ if __name__ == '__main__':
     except Exception as e:
         st.error(f"發生錯誤：{e}")
 
-if __name__ == '__main__':
-    st.set_page_config(page_title="台南公車 AI 版", page_icon="🚌")
-    st.header("🚌 台南公車即時動態 (AI 助手版)")
 
-    #
-if __name__ == '__main__':
-    # 設定網頁標題與圖示
-    st.set_page_config(page_title="台南公車即時動態", page_icon="🚌")
-    st.header("🚌 台南公車即時動態看板")
-
-    # 1. 在側邊欄加入選單 (這就是你要的選單！)
-    with st.sidebar:
-        st.title("查詢設定")
-        # 建立一個路線下拉選單，你可以自己增加常用路線
-        route_choice = st.selectbox(
-            "請選擇路線", 
-            ["2", "5", "綠12", "黃22", "橘20", "藍20"]
-        )
-        st.write(f"目前查詢：{route_choice} 路公車")
-
-    # 2. 修改 URL：把原本末端的 /2 改成 /{route_choice}
-    # 這樣當選單切換時，API 抓取的路線就會跟著變
-    url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/{route_choice}?%24format=JSON"
-
-    # 驗證與抓取資料邏輯
-    try:
-        a = Auth(app_id, app_key)
-        auth_response = requests.post(auth_url, data=a.get_auth_header())
-        d = data(app_id, app_key, auth_response)
-        
-        # 使用動態產生的 url 抓資料
-        data_response = requests.get(url, headers=d.get_data_header())
-        
-        if data_response.status_code == 200:
-            bus_list = data_response.json()
-            final_list = []
-            
-            for stop in bus_list:
-                route_name = stop.get('RouteName', {}).get('Zh_tw', '未知')
-                sub_route = stop.get('SubRouteName', {}).get('Zh_tw', '未知')
-                seconds = stop.get('EstimateTime')
-                
-                status = f"{seconds // 60} 分鐘" if seconds is not None else "尚未發車"
-                
-                final_list.append({
-                    "路線名稱": route_name,
-                    "方向": sub_route,
-                    "到站狀態": status
-                })
-            
-            if final_list:
-                # 這裡改用 st.dataframe 會更像專業的 App 介面
-                st.dataframe(final_list, use_container_width=True)
-            else:
-                st.info("目前查無此路線的即時資訊。")
-      # ... 這是你原本 if 區塊的結尾
-    except Exception as e:
-        st.error(f"發生錯誤：{e}")
 
 
         
