@@ -7,7 +7,8 @@ import google.generativeai as genai
 # 1. 從 Streamlit Secrets 讀取金鑰
 app_id = st.secrets["CLIENT_ID"]
 app_key = st.secrets["CLIENT_SECRET"]
-
+app_id = st.secrets["CLIENT_ID"]
+app_key = st.secrets["CLIENT_SECRET"]
 # 2. 正確的 TDX 驗證網址與公車資料網址
 auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token" 
 url = "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/2?%24format=JSON"
