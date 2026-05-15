@@ -8,7 +8,7 @@ import google.generativeai as genai
 app_id = st.secrets["CLIENT_ID"]
 app_key = st.secrets["CLIENT_SECRET"]
 GEMINI_API_KEY = st.secrets["CLIENT_ID"]
-GEMINI_API_KEY = st.secrets["CLIENT_SECRET"]
+
 # 2. 正確的 TDX 驗證網址與公車資料網址
 auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token" 
 url = "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/2?%24format=JSON"
