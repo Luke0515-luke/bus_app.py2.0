@@ -78,6 +78,7 @@ def fetch_all_routes(headers_dict):
     return []
 
 # --- 2. 修改主程式中的側邊欄部分 ---
+# --- 修正後的執行主體 ---
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時時刻查詢")
@@ -91,36 +92,27 @@ if __name__ == '__main__':
         with st.sidebar:
             st.title("查詢設定")
             
-            # 自動抓取所有路線
+            # 1. 抓取所有路線
             all_available_routes = fetch_all_routes(h)
-            
             route_choice = st.selectbox(
                 "請選擇路線", 
-                all_available_routes, # 這裡現在會顯示台南所有的路線了！
+                all_available_routes,
                 index=all_available_routes.index("2") if "2" in all_available_routes else 0,
                 key="bus_route_select"
             )
             
-            # 取得該路線的站點列表
+            # 2. 取得站點列表 (只寫一次！)
             all_stops = fetch_route_stops(route_choice, h)
             if all_stops:
-                start_st = st.selectbox("請選擇起始站", all_stops)
-                end_st = st.selectbox("請選擇目的地", all_stops, index=len(all_stops)-1)
+                # 這裡加上 key 確保唯一性
+                start_st = st.selectbox("請選擇起始站", all_stops, key="start_select")
+                end_st = st.selectbox("請選擇目的地", all_stops, index=len(all_stops)-1, key="end_select")
             else:
-                st.warning("無法載入站點")
+                st.warning("無法載入站點資訊")
 
-        # ... (後續抓取即時資料與 AI 的邏輯保持不變) ...
-
-            all_stops = fetch_route_stops(route_choice, d.get_data_header())
-            if all_stops:
-                start_st = st.selectbox("請選擇起始站", all_stops)
-                end_st = st.selectbox("請選擇目的地", all_stops, index=len(all_stops)-1)
-            else:
-                st.warning("無法載入站點")
-
-        # 取得即時資料
+        # 3. 取得即時到站資料
         url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/{route_choice}?%24format=JSON"
-        bus_list = fetch_bus_data(url, d.get_data_header())
+        bus_list = fetch_bus_data(url, h)
         
         if bus_list: 
             filtered_list = []
@@ -144,22 +136,19 @@ if __name__ == '__main__':
                 user_question = st.chat_input("想知道這兩站之間的乘車建議嗎？")
                 
                 if user_question:
-                    if not filtered_list: 
-                        st.warning("暫無資料可分析。") 
-                    else:
-                        with st.spinner("AI 正在分析資料..."):
-                            try:
-                                prompt_content = f"資料：{json.dumps(filtered_list, ensure_ascii=False)}"
-                                response = client.models.generate_content( 
-                                    model="gemini-2.0-flash", 
-                                    contents=f"{prompt_content}\n問題：{user_question}" 
-                                )
-                                st.info(f"AI 回覆：{response.text}")
-                            except Exception as e:
-                                if "429" in str(e):
-                                    st.error("⚠️ 配額用完，請稍後再試。") 
-                                else:
-                                    st.error(f"AI 錯誤：{e}")
+                    with st.spinner("AI 正在分析資料..."):
+                        try:
+                            prompt_content = f"資料：{json.dumps(filtered_list, ensure_ascii=False)}"
+                            response = client.models.generate_content( 
+                                model="gemini-2.0-flash", 
+                                contents=f"{prompt_content}\n問題：{user_question}" 
+                            )
+                            st.info(f"AI 回覆：{response.text}")
+                        except Exception as e:
+                            if "429" in str(e):
+                                st.error("⚠️ 配額用完，請稍後再試。") 
+                            else:
+                                st.error(f"AI 錯誤：{e}")
             else:
                 st.info("目前該路段暫無即時資訊。") 
                 
