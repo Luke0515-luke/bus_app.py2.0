@@ -42,6 +42,14 @@ class DataProcessor(): # 重新命名以避免與關鍵字衝突
         }
 
 # --- 程式執行主體 ---
+# 在你的主程式中
+@st.cache_data(ttl=30) # 暫存資料 30 秒，避免頻繁請求導致 429
+def get_bus_data(url, _headers):
+    res = requests.get(url, headers=_headers)
+    return res.json() if res.status_code == 200 else None
+
+# 使用時改成：
+bus_list = get_bus_data(url, d.get_data_header())
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時動態 (2026 升級版)")
