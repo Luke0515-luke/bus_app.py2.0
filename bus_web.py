@@ -159,19 +159,26 @@ if __name__ == '__main__':
                     st.caption(f"🌡️ 當前天氣：{weather_info}")
                     st.table(filtered_list)
                     
-                    # AI 對話區... (保持原樣)
+                    # --- AI 對話區 ---
+                    st.divider()
+                    st.subheader("🤖 問問 AI 助理")
+                    user_question = st.chat_input("想知道哪一班車比較建議搭乘嗎？")
+                    
+                    if user_question:
+                        with st.spinner("AI 正在分析資料..."):
+                            try:
+                                prompt_content = f"目前在 {start_st} 準備前往 {end_st} 的公車即時到站資訊如下：{json.dumps(filtered_list, ensure_ascii=False)}"
+                                response = client.models.generate_content(
+                                    model="gemini-2.0-flash",
+                                    contents=f"{prompt_content}\n使用者問題：{user_question}\n請以專業公車導遊的身份，根據到站時間與天氣 {weather_info} 給予建議。"
+                                )
+                                st.info(f"AI 建議：{response.text}")
+                            except Exception as ai_e:
+                                st.error(f"AI 錯誤：{ai_e}")
+                
+                # --- 這裡就是報錯的地方：else 必須跟 if filtered_list 對齊 ---
                 else:
                     st.info(f"目前 {start_st} 暫無即時到站資訊。")
-            else:
-                st.error("無法取得公車資料，請確認 API 狀態。")
-        elif not route_choice:
-            # 初始畫面提示
-            st.image("https://img.icons8.com/clouds/200/bus.png")
-            st.write("👋 你好！請在左側選單選擇公車路線並按下查詢按鈕。")
-
-    except Exception as e:
-        st.error(f"系統錯誤：{e}")
-                st.info(f"目前 {start_st} 暫無即時到站資訊。") 
                 
     except Exception as e:
         st.error(f"系統錯誤：{e}")
