@@ -82,14 +82,32 @@ if __name__ == '__main__':
                 user_question = st.chat_input("想知道什麼？")
                 
                 if user_question:
-                    with st.spinner("AI 正在分析資料..."):
-                        # 4. 使用最新 SDK 的呼叫方式
+            # 檢查資料清單是否為空
+            if not final_list:
+                st.warning("目前沒有即時資料可以分析，請稍後再試。")
+            else:
+                with st.spinner("AI 正在分析資料..."):
+                    try:
+                        # 2. 正常呼叫 Gemini API
                         response = client.models.generate_content(
-                            model="gemini-2.0-flash", # 自動升級到最強的 2.0
+                            model="gemini-2.0-flash",
                             contents=f"資料：{json.dumps(final_list, ensure_ascii=False)}\n問題：{user_question}"
                         )
+                        # 顯示 AI 的回覆
                         st.info(f"AI 回覆：{response.text}")
-            else:
-                st.info("目前查無即時資訊。")
-    except Exception as e:
-        st.error(f"錯誤：{e}")
+                        
+                    except Exception as e:
+                        # 3. 捕捉配額錯誤並提示
+                        if "429" in str(e):
+                            st.error("⚠️ AI 助理累了（配額用完），請等一分鐘後再問我一次喔！")
+                        else:
+                            st.error(f"發生其他錯誤：{e}")
+        else:
+            # 如果使用者沒輸入問題，這裡什麼都不做，或是可以放提示
+            pass
+
+    else:
+        st.info("目前查無即時資訊。")
+
+except Exception as e:
+    st.error(f"錯誤：{e}")
