@@ -62,26 +62,55 @@ def fetch_bus_data(url, headers_dict):
     except:
         return None
     return None
+# --- 1. 新增：自動抓取台南所有路線清單的函數 ---
+@st.cache_data(ttl=86400) # 路線清單一天抓一次即可
+def fetch_all_routes(headers_dict):
+    url = "https://tdx.transportdata.tw/api/basic/v2/Bus/Route/City/Tainan?%24format=JSON"
+    try:
+        res = requests.get(url, headers=headers_dict)
+        if res.status_code == 200:
+            data = res.json()
+            # 提取所有路線的中文名稱，並進行排序
+            routes = sorted(list(set([r['RouteName']['Zh_tw'] for r in data])))
+            return routes
+    except:
+        return ["2", "5", "綠12", "黃22", "橘20", "藍20"] # 失敗時的備案
+    return []
 
-# --- 程式執行主體 ---
+# --- 2. 修改主程式中的側邊欄部分 ---
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
-    st.header("🚌 台南公車即時時刻查詢") 
+    st.header("🚌 台南公車即時時刻查詢")
 
     try:
-        a = Auth(app_id, app_key) 
-        auth_res = requests.post(auth_url, data=a.get_auth_header()) 
-        d = DataProcessor(auth_res) 
+        a = Auth(app_id, app_key)
+        auth_res = requests.post(auth_url, data=a.get_auth_header())
+        d = DataProcessor(auth_res)
+        h = d.get_data_header()
 
-        with st.sidebar: 
-            st.title("查詢設定") 
+        with st.sidebar:
+            st.title("查詢設定")
+            
+            # 自動抓取所有路線
+            all_available_routes = fetch_all_routes(h)
+            
             route_choice = st.selectbox(
                 "請選擇路線", 
-                ["2", "5", "綠12", "黃22", "橘20", "藍20"],
+                all_available_routes, # 這裡現在會顯示台南所有的路線了！
+                index=all_available_routes.index("2") if "2" in all_available_routes else 0,
                 key="bus_route_select"
-            ) 
+            )
             
-            # 取得站點列表
+            # 取得該路線的站點列表
+            all_stops = fetch_route_stops(route_choice, h)
+            if all_stops:
+                start_st = st.selectbox("請選擇起始站", all_stops)
+                end_st = st.selectbox("請選擇目的地", all_stops, index=len(all_stops)-1)
+            else:
+                st.warning("無法載入站點")
+
+        # ... (後續抓取即時資料與 AI 的邏輯保持不變) ...
+
             all_stops = fetch_route_stops(route_choice, d.get_data_header())
             if all_stops:
                 start_st = st.selectbox("請選擇起始站", all_stops)
