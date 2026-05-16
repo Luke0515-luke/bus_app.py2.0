@@ -94,40 +94,22 @@ def fetch_weather_data(headers_dict):
         return "暫時無法取得氣象資訊"
     return "尚無氣象資料"
 # --- 程式執行主體 ---
+# --- 程式執行主體 ---
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時時刻查詢")
 
     try:
-        # 在執行主體中取得天氣
-        weather_info = fetch_weather_data(h)
-
-        # ... (中間公車邏輯不變) ...
-
-        if user_question:
-            with st.spinner("AI 正在分析資料與天氣..."):
-                try:
-                    # 將天氣資訊加入 prompt
-                    prompt_content = f"""
-                    目前氣象：{weather_info}
-                    公車資料：{json.dumps(filtered_list, ensure_ascii=False)}
-                    """
-                    
-                    response = client.models.generate_content(
-                        model="gemini-2.0-flash",
-                        contents=f"{prompt_content}\n問題：{user_question}\n請結合天氣與公車時間給予建議。如果下雨請提醒帶傘，如果高溫請提醒防曬。"
-                    )
-                    
-                    # 在畫面上額外顯示天氣小標籤
-                    st.caption(f"☁️ 當前天氣預報：{weather_info}")
-                    st.info(f"AI 建議：{response.text}")
-                except Exception as e:
-                    st.error(f"AI 錯誤：{e}")
+        # 1. 【最重要】先執行身份驗證，取得後續 API 需要用的 h (header)
         a = Auth(app_id, app_key)
         auth_res = requests.post(auth_url, data=a.get_auth_header())
         d = DataProcessor(auth_res)
-        h = d.get_data_header()
+        h = d.get_data_header() # 這裡定義了 h
 
+        # 2. 取得即時氣象 (現在 h 已經存在了)
+        weather_info = fetch_weather_data(h)
+
+        # 3. 側邊欄設定
         with st.sidebar:
             st.title("查詢設定")
             all_available_routes = fetch_all_routes(h)
@@ -145,7 +127,7 @@ if __name__ == '__main__':
             else:
                 st.warning("無法載入站點資訊")
 
-        # 3. 取得即時到站資料
+        # 4. 取得即時公車到站資料
         url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/{route_choice}?%24format=JSON"
         bus_list = fetch_bus_data(url, h)
         
@@ -156,7 +138,6 @@ if __name__ == '__main__':
             filtered_list = []
             for stop in bus_list: 
                 name = stop.get('StopName', {}).get('Zh_tw', '未知') 
-                # 只顯示起始站的即時動態
                 if name == start_st:
                     estimate = stop.get('EstimateTime')
                     status = f"{estimate // 60} 分鐘" if estimate is not None else "尚未發車"
@@ -168,6 +149,8 @@ if __name__ == '__main__':
             
             if filtered_list:
                 st.subheader(f"📍 正在 {start_st} 等候的公車 (往 {end_st} 方向)")
+                # 顯示即時天氣小標籤
+                st.caption(f"🌡️ 當前天氣：{weather_info}")
                 st.table(filtered_list)
                 
                 st.divider()
@@ -175,19 +158,26 @@ if __name__ == '__main__':
                 user_question = st.chat_input("想知道哪一班車比較建議搭乘嗎？")
                 
                 if user_question:
-                    with st.spinner("AI 正在分析資料..."):
+                    with st.spinner("AI 正在分析資料與天氣..."):
                         try:
-                            prompt_content = f"目前在 {start_st} 準備前往 {end_st} 的公車即時到站資訊如下：{json.dumps(filtered_list, ensure_ascii=False)}"
-                            response = client.models.generate_content( 
-                                model="gemini-2.0-flash", 
-                                contents=f"{prompt_content}\n使用者問題：{user_question}\n請以專業公車導遊的身份，根據到站時間給予乘車建議。" 
+                            # 整合天氣與公車資料給 AI
+                            prompt_content = f"""
+                            目前氣象：{weather_info}
+                            公車資料：{json.dumps(filtered_list, ensure_ascii=False)}
+                            起始站：{start_st}
+                            目的地：{end_st}
+                            """
+                            
+                            response = client.models.generate_content(
+                                model="gemini-2.0-flash",
+                                contents=f"{prompt_content}\n使用者問題：{user_question}\n請以專業公車導遊身份建議。若下雨提醒帶傘，若高溫提醒防曬。"
                             )
                             st.info(f"AI 建議：{response.text}")
-                        except Exception as e:
-                            if "429" in str(e):
-                                st.error("⚠️ 配額用完，請稍後再試。") 
+                        except Exception as ai_e:
+                            if "429" in str(ai_e):
+                                st.error("⚠️ AI 配額用完，請稍後再試。")
                             else:
-                                st.error(f"AI 錯誤：{e}")
+                                st.error(f"AI 錯誤：{ai_e}")
             else:
                 st.info(f"目前 {start_st} 暫無即時到站資訊。") 
                 
