@@ -108,4 +108,4 @@ if __name__ == '__main__':
             else:
                 st.info("目前查無即時資訊。")
 except Exception as e:
-    st.error(f"錯誤：{e}")
+st.error(f"錯誤：{e}")
