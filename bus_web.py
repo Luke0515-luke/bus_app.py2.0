@@ -106,7 +106,7 @@ if __name__ == '__main__':
                         "到站狀態": status
                     })
             
-            if filtered_list: [cite: 7]
+            if filtered_list:
                 st.subheader(f"📍 從 {start_st} 到 {end_st}")
                 st.table(filtered_list)
                 
