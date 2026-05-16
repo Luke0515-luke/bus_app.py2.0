@@ -45,15 +45,25 @@ class data():
 # --- 程式執行主體 ---
 
 # --- 程式執行主體 ---
+# 找到這一段並修改
 if "GEMINI_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_KEY"])
-    # 嘗試使用包含 models/ 路徑的完整名稱，或是換成 gemini-pro
+    
     try:
+        # 嘗試最標準的名稱
         model = genai.GenerativeModel('gemini-1.5-flash')
-    except:
-        model = genai.GenerativeModel('gemini-pro') # 如果 1.5 不行，改用這個保險牌
+        # 做一個極簡測試，確保模型真的能用
+        model.generate_content("ping") 
+    except Exception as e:
+        # 如果失敗，嘗試加上 models/ 前綴
+        try:
+            model = genai.GenerativeModel('models/gemini-1.5-flash')
+        except:
+            # 最後的保險牌：使用 gemini-pro (1.0 版本)
+            model = genai.GenerativeModel('gemini-pro')
+            st.warning("Gemini 1.5 Flash 啟動失敗，已自動切換至 Gemini Pro。")
 else:
-    st.error("找不到 GEMINI_KEY，請檢查 Secrets！")
+    st.error("找不到 GEMINI_KEY，請檢查 Secrets 設定！")
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時動態 (AI 版)")
