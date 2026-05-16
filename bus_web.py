@@ -83,10 +83,10 @@ if __name__ == '__main__':
                 
                 if user_question:
             # 檢查資料清單是否為空
-            if not final_list:
-                st.warning("目前沒有即時資料可以分析，請稍後再試。")
-            else:
-                with st.spinner("AI 正在分析資料..."):
+                    if not final_list:
+                           st.warning("目前沒有即時資料可以分析，請稍後再試。")
+                else:
+                    with st.spinner("AI 正在分析資料..."):
                     try:
                         # 2. 正常呼叫 Gemini API
                         response = client.models.generate_content(
