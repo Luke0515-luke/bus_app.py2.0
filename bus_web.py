@@ -75,13 +75,54 @@ def fetch_all_routes(headers_dict):
     except:
         return ["2", "5", "綠12", "黃22", "橘20", "藍20"]
     return []
-
+# --- 新增：抓取台南即時氣象的函數 ---
+@st.cache_data(ttl=600) # 天氣每 10 分鐘抓一次即可
+def fetch_weather_data(headers_dict):
+    # 使用 TDX 的觀測站即時氣象 API (以台南測站為例)
+    weather_url = "https://tdx.transportdata.tw/api/basic/v1/Weather/Observation/Station/City/Tainan?%24format=JSON"
+    try:
+        res = requests.get(weather_url, headers=headers_dict)
+        if res.status_code == 200:
+            data = res.json()
+            if data:
+                # 抓取第一筆觀測資料的天氣現象與氣溫
+                obs = data[0]
+                temp = obs.get('AirTemperature', '未知')
+                weather_desc = obs.get('Weather', '未知')
+                return f"氣溫 {temp}°C，天氣狀況：{weather_desc}"
+    except:
+        return "暫時無法取得氣象資訊"
+    return "尚無氣象資料"
 # --- 程式執行主體 ---
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時時刻查詢")
 
     try:
+        # 在執行主體中取得天氣
+        weather_info = fetch_weather_data(h)
+
+        # ... (中間公車邏輯不變) ...
+
+        if user_question:
+            with st.spinner("AI 正在分析資料與天氣..."):
+                try:
+                    # 將天氣資訊加入 prompt
+                    prompt_content = f"""
+                    目前氣象：{weather_info}
+                    公車資料：{json.dumps(filtered_list, ensure_ascii=False)}
+                    """
+                    
+                    response = client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=f"{prompt_content}\n問題：{user_question}\n請結合天氣與公車時間給予建議。如果下雨請提醒帶傘，如果高溫請提醒防曬。"
+                    )
+                    
+                    # 在畫面上額外顯示天氣小標籤
+                    st.caption(f"☁️ 當前天氣預報：{weather_info}")
+                    st.info(f"AI 建議：{response.text}")
+                except Exception as e:
+                    st.error(f"AI 錯誤：{e}")
         a = Auth(app_id, app_key)
         auth_res = requests.post(auth_url, data=a.get_auth_header())
         d = DataProcessor(auth_res)
