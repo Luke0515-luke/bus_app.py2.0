@@ -96,6 +96,7 @@ def fetch_weather_data(headers_dict):
 # --- 程式執行主體 ---
 # --- 程式執行主體 ---
 # --- 執行主體修改 ---
+# --- 程式執行主體 ---
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時時刻查詢")
@@ -107,16 +108,26 @@ if __name__ == '__main__':
         d = DataProcessor(auth_res)
         h = d.get_data_header()
 
+        # --- 初始化預設變數給 AI 使用 ---
+        current_weather = "使用者尚未查詢"
+        bus_status = "使用者尚未查詢路線"
+
         # 側邊欄設定
         with st.sidebar:
             st.title("查詢設定")
+            
+            # 若路線改變，重置查詢按鈕的記憶
+            def reset_search():
+                st.session_state.search_clicked = False
+                
             all_available_routes = fetch_all_routes(h)
             route_choice = st.selectbox(
                 "請選擇路線", 
                 all_available_routes,
                 index=None, # 一開始不預選任何路線
                 placeholder="請點選或輸入路線名稱...",
-                key="bus_route_select"
+                key="bus_route_select",
+                on_change=reset_search # 換路線時觸發重置
             )
             
             # 只有選了路線後，才顯示站點選單
@@ -126,18 +137,18 @@ if __name__ == '__main__':
                     start_st = st.selectbox("請選擇起始站", all_stops, key="start_select")
                     end_st = st.selectbox("請選擇目的地 (僅作路徑參考)", all_stops, index=len(all_stops)-1, key="end_select")
                     
-                    # --- 關鍵：增加查詢按鈕 ---
-                    search_btn = st.button("🔍 開始查詢即時動態", type="primary")
+                    # --- 關鍵：使用 session_state 記住按鈕有被按過 ---
+                    if st.button("🔍 開始查詢即時動態", type="primary"):
+                        st.session_state.search_clicked = True
                 else:
                     st.warning("無法載入站點資訊")
             else:
                 st.info("請先在上方選擇一條公車路線。")
-                search_btn = False
 
-        # --- 2. 只有按下按鈕後才執行查詢邏輯 ---
-        if route_choice and search_btn:
-            # 此時才去抓天氣，避免一進網頁就浪費額度
+        # --- 2. 公車資料顯示區 (確認有選路線，且按鈕曾經被按過) ---
+        if route_choice and st.session_state.get("search_clicked", False):
             weather_info = fetch_weather_data(h)
+            current_weather = weather_info # 把天氣存下來給 AI
             
             url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/{route_choice}?%24format=JSON"
             bus_list = fetch_bus_data(url, h)
@@ -159,26 +170,36 @@ if __name__ == '__main__':
                     st.caption(f"🌡️ 當前天氣：{weather_info}")
                     st.table(filtered_list)
                     
-                    # --- AI 對話區 ---
-                    st.divider()
-                    st.subheader("🤖 問問 AI 助理")
-                    user_question = st.chat_input("想知道哪一班車比較建議搭乘嗎？")
-                    
-                    if user_question:
-                        with st.spinner("AI 正在分析資料..."):
-                            try:
-                                prompt_content = f"目前在 {start_st} 準備前往 {end_st} 的公車即時到站資訊如下：{json.dumps(filtered_list, ensure_ascii=False)}"
-                                response = client.models.generate_content(
-                                    model="gemini-2.0-flash",
-                                    contents=f"{prompt_content}\n使用者問題：{user_question}\n請以專業公車導遊的身份，根據到站時間與天氣 {weather_info} 給予建議。"
-                                )
-                                st.info(f"AI 建議：{response.text}")
-                            except Exception as ai_e:
-                                st.error(f"AI 錯誤：{ai_e}")
-                
-                # --- 這裡就是報錯的地方：else 必須跟 if filtered_list 對齊 ---
+                    # 把抓到的公車動態存下來給 AI
+                    bus_status = f"目前在 {start_st} 準備前往 {end_st}。即時動態：{json.dumps(filtered_list, ensure_ascii=False)}"
                 else:
                     st.info(f"目前 {start_st} 暫無即時到站資訊。")
+                    bus_status = f"目前 {start_st} 暫無即時到站資訊。"
+            else:
+                st.error("無法取得公車資料，請確認 API 狀態。")
                 
+        elif not route_choice:
+            st.image("https://img.icons8.com/clouds/200/bus.png")
+            st.write("👋 你好！請在左側選單選擇公車路線，或直接在下方詢問 AI 助理。")
+
+        # --- 3. AI 對話區 (獨立移到最下方，隨時準備回答) ---
+        st.divider()
+        st.subheader("🤖 問問 AI 助理")
+        user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
+        
+        if user_question:
+            with st.spinner("AI 正在思考中..."):
+                try:
+                    # 組合 Context 餵給 AI
+                    prompt_content = f"【目前天氣】：{current_weather}\n【公車狀態】：{bus_status}"
+                    
+                    response = client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=f"{prompt_content}\n使用者問題：{user_question}\n請以專業、友善的台南公車導遊身份回覆。若有提供天氣或公車數據請結合回答，若無數據則直接針對問題給予常識性的建議。"
+                    )
+                    st.info(f"AI 助理：{response.text}")
+                except Exception as ai_e:
+                    st.error(f"AI 錯誤：{ai_e}")
+
     except Exception as e:
         st.error(f"系統錯誤：{e}")
