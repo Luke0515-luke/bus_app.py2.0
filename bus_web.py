@@ -205,5 +205,5 @@ if __name__ == '__main__':
                     ai_text = chat_completion.choices[0].message.content
                     st.info(f"AI 助理 : {ai_text}")
                 
-                finally Exception as ai_e:  # 這裡必須與上面的 try 對齊
-                    st.error(f"發生錯誤 : {ai_e}")
+                finally :  # 這裡必須與上面的 try 對齊
+                    st.error("發生錯誤 : ")
