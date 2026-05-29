@@ -181,19 +181,19 @@ if __name__ == '__main__':
             st.image("https://img.icons8.com/clouds/200/bus.png")
             st.write("👋 你好！請在左側選單選擇公車路線，或直接在下方詢問 AI 助理。")
 
-        # --- 3. AI 對話區 (獨立移到最下方，隨時準備回答) ---
+       
+        # --- 3. AI 對話區 ---
         st.divider()
         st.subheader("🤖 問問 AI 助理")
         user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
         
-        # 3. AI 對話區
-        # 3. AI 對話區 (確認對齊方式)
         if user_question:
             with st.spinner("AI 正在思考中..."):
                 try: 
-                    # 這一行開頭請保持 16 個空格的縮排
+                    # 組合 Context
                     prompt_content = f"【目前天氣】：{current_weather}\n【公車狀態】：{bus_status}"
                     
+                    # 呼叫 Groq 模型
                     chat_completion = client.chat.completions.create(
                         messages=[
                             {"role": "system", "content": "你是一位專業、友善的台南公車導遊。"},
@@ -204,6 +204,7 @@ if __name__ == '__main__':
                     
                     ai_text = chat_completion.choices[0].message.content
                     st.info(f"AI 助理：{ai_text}")
+                    
                 except Exception as ai_e: 
-                    # 這行 except 請務必與上面的 try 對齊（開頭空格數必須一致）
+                    # 這裡確保 except 與 try 完全對齊
                     st.error(f"AI 目前忙碌中，請稍後再試（錯誤代碼：{ai_e}）")
