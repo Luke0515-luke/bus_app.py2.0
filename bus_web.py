@@ -206,4 +206,4 @@ if __name__ == '__main__':
                     st.info(f"AI 助理 : {ai_text}")
                 
                 finally :  # 這裡必須與上面的 try 對齊
-                    st.error("發生錯誤 : ")
+                    x="abc"
