@@ -186,9 +186,10 @@ if __name__ == '__main__':
         st.subheader("🤖 問問 AI 助理")
         user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
         
+        # 3. AI 對話區
         if user_question:
             with st.spinner("AI 正在思考中..."):
-                try:
+                try: # try 與 except 必須在同一層縮排
                     # 組合 Context
                     prompt_content = f"【目前天氣】：{current_weather}\n【公車狀態】：{bus_status}"
                     
@@ -210,5 +211,5 @@ if __name__ == '__main__':
                     ai_text = chat_completion.choices[0].message.content
                     st.info(f"AI 助理：{ai_text}")
                     
-                except Exception as ai_e:
+                except Exception as ai_e: # 修正：這裡要向左退回到與 try 對齊
                     st.error(f"AI 目前忙碌中，請稍後再試（錯誤代碼：{ai_e}）")
