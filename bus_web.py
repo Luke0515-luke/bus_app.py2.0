@@ -209,4 +209,3 @@ if __name__ == '__main__':
                     
                 except Exception as ai_e:
                     st.error(f"發生錯誤：{ai_e}")
-
