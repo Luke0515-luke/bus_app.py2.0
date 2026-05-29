@@ -204,9 +204,9 @@ if __name__ == '__main__':
                     )
                     
                     # 顯示 AI 回覆
-            ai_text = chat_completion.choices[0].message.content
-            st.info(f"AI 助理：{ai_text}")
+                    ai_text = chat_completion.choices[0].message.content
+                    st.info(f"AI 助理：{ai_text}")
                     
-        except Exception as ai_e:
+                except Exception as ai_e:
                     # 錯誤處理
-            st.error(f"AI 目前忙碌中，請稍後再試（錯誤代碼：{ai_e}）")
+                    st.error(f"AI 目前忙碌中，請稍後再試（錯誤代碼：{ai_e}）")
