@@ -188,15 +188,15 @@ if __name__ == '__main__':
         st.subheader("🤖 問問 AI 助理")
         user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
         
-if user_question:
-    with st.spinner("AI 正在思考中..."):
-        try:
+        if user_question:
+            with st.spinner("AI 正在思考中..."):
+                try:
                     # 準備給 AI 的提示詞
-            prompt_content = f"【目前天氣】：{current_weather}\n【公車狀態】：{bus_status}"
+                    prompt_content = f"【目前天氣】：{current_weather}\n【公車狀態】：{bus_status}"
                     
                     # 呼叫 Groq API
-            chat_completion = client.chat.completions.create(
-                messages=[
+                    chat_completion = client.chat.completions.create(
+                    messages=[
                     {"role": "system", "content": "你是一位專業、友善的台南公車導遊。"},
                     {"role": "user", "content": f"{prompt_content}\n使用者問題：{user_question}"}
                         ],
