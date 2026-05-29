@@ -187,23 +187,17 @@ if __name__ == '__main__':
         user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
         
         # 3. AI 對話區
+        # 3. AI 對話區 (確認對齊方式)
         if user_question:
             with st.spinner("AI 正在思考中..."):
-                try: # try 與 except 必須在同一層縮排
-                    # 組合 Context
+                try: 
+                    # 這一行開頭請保持 16 個空格的縮排
                     prompt_content = f"【目前天氣】：{current_weather}\n【公車狀態】：{bus_status}"
                     
-                    # 呼叫 Groq 模型
                     chat_completion = client.chat.completions.create(
                         messages=[
-                            {
-                                "role": "system",
-                                "content": "你是一位專業、友善的台南公車導遊。若有提供天氣或公車數據請結合回答，若無數據則直接針對問題給予常識性的建議。"
-                            },
-                            {
-                                "role": "user",
-                                "content": f"{prompt_content}\n使用者問題：{user_question}"
-                            }
+                            {"role": "system", "content": "你是一位專業、友善的台南公車導遊。"},
+                            {"role": "user", "content": f"{prompt_content}\n使用者問題：{user_question}"}
                         ],
                         model="llama3-8b-8192", 
                     )
@@ -211,5 +205,6 @@ if __name__ == '__main__':
                     ai_text = chat_completion.choices[0].message.content
                     st.info(f"AI 助理：{ai_text}")
                     
-                except Exception as ai_e: # 修正：這裡要向左退回到與 try 對齊
+                except Exception as ai_e: 
+                    # 這行 except 請務必與上面的 try 對齊（開頭空格數必須一致）
                     st.error(f"AI 目前忙碌中，請稍後再試（錯誤代碼：{ai_e}）")
