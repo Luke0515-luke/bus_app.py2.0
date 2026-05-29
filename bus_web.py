@@ -2,17 +2,16 @@ import json
 import streamlit as st
 import requests
 import pandas as pd
-from google import genai 
+from groq import Groq
 
 # 1. 讀取 Secrets
 app_id = st.secrets["CLIENT_ID"] 
 app_key = st.secrets["CLIENT_SECRET"] 
 
-# 2. 初始化 Gemini 客戶端
-if "GEMINI_KEY" in st.secrets: 
-    client = genai.Client(api_key=st.secrets["GEMINI_KEY"]) 
+if "GROQ_API_KEY" in st.secrets: 
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
 else:
-    st.error("找不到 GEMINI_KEY，請檢查 Secrets！")
+    st.error("找不到 GROQ_API_KEY，請檢查 Secrets！")
 
 # --- TDX 驗證與資料處理類別 ---
 auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
@@ -190,16 +189,26 @@ if __name__ == '__main__':
         if user_question:
             with st.spinner("AI 正在思考中..."):
                 try:
-                    # 組合 Context 餵給 AI
+                    # 組合 Context
                     prompt_content = f"【目前天氣】：{current_weather}\n【公車狀態】：{bus_status}"
                     
-                    response = client.models.generate_content(
-                        model="gemini-2.0-flash",
-                        contents=f"{prompt_content}\n使用者問題：{user_question}\n請以專業、友善的台南公車導遊身份回覆。若有提供天氣或公車數據請結合回答，若無數據則直接針對問題給予常識性的建議。"
+                    # 呼叫 Groq 模型
+                    chat_completion = client.chat.completions.create(
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "你是一位專業、友善的台南公車導遊。若有提供天氣或公車數據請結合回答，若無數據則直接針對問題給予常識性的建議。"
+                            },
+                            {
+                                "role": "user",
+                                "content": f"{prompt_content}\n使用者問題：{user_question}"
+                            }
+                        ],
+                        model="llama3-8b-8192", 
                     )
-                    st.info(f"AI 助理：{response.text}")
+                    
+                    ai_text = chat_completion.choices[0].message.content
+                    st.info(f"AI 助理：{ai_text}")
+                    
                 except Exception as ai_e:
-                    st.error(f"AI 錯誤：{ai_e}")
-
-    except Exception as e:
-        st.error(f"系統錯誤：{e}")
+                    st.error(f"AI 目前忙碌中，請稍後再試（錯誤代碼：{ai_e}）")
