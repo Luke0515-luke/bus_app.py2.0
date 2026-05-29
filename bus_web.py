@@ -189,21 +189,21 @@ if __name__ == '__main__':
         user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
         
         if user_question:
-        with st.spinner("AI 正在思考中..."):
-            try:  # 這裡開始 try
+            with st.spinner("AI 正在思考中..."):
+                try:  # 這裡開始 try
                 # 下面這些行必須全部向右縮排
-                prompt_content = f"【目前天氣】: {current_weather}\n【公車狀態】: {bus_status}"
+                    prompt_content = f"【目前天氣】: {current_weather}\n【公車狀態】: {bus_status}"
                 
-                chat_completion = client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": "你是一位專業、友善的台南公車導遊。"},
-                        {"role": "user", "content": f"{prompt_content}\n使用者問題 : {user_question}"}
+                    chat_completion = client.chat.completions.create(
+                        messages=[
+                            {"role": "system", "content": "你是一位專業、友善的台南公車導遊。"},
+                            {"role": "user", "content": f"{prompt_content}\n使用者問題 : {user_question}"}
                     ],
-                    model="llama3-8b-8192",
+                        model="llama3-8b-8192",
                 )
                 
-                ai_text = chat_completion.choices[0].message.content
-                st.info(f"AI 助理 : {ai_text}")
+                    ai_text = chat_completion.choices[0].message.content
+                    st.info(f"AI 助理 : {ai_text}")
                 
-            except Exception as ai_e:  # 這裡必須與上面的 try 對齊
-                st.error(f"發生錯誤 : {ai_e}")
+                except Exception as ai_e:  # 這裡必須與上面的 try 對齊
+                    st.error(f"發生錯誤 : {ai_e}")
