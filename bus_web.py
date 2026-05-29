@@ -204,7 +204,6 @@ if __name__ == '__main__':
                     
                     ai_text = chat_completion.choices[0].message.content
                     st.info(f"AI 助理：{ai_text}")
-                    
                 except Exception as ai_e: 
                     # 這行 except 請務必與上面的 try 對齊（開頭空格數必須一致）
                     st.error(f"AI 目前忙碌中，請稍後再試（錯誤代碼：{ai_e}）")
