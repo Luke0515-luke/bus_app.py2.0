@@ -203,5 +203,7 @@ if __name__ == '__main__':
                     )
                 
                     ai_text = chat_completion.choices[0].message.content
+                except Exception as ai_e:  # 這裡必須與上面的 try 對齊                
+                    st.info(f"AI 助理 : {ai_text}")
     except Exception as ai_e:  # 這裡必須與上面的 try 對齊                
         st.info(f"AI 助理 : {ai_text}")
