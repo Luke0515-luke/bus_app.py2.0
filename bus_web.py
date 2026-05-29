@@ -208,5 +208,5 @@ if __name__ == '__main__':
                     st.info(f"AI 助理：{ai_text}")
                     
                 except Exception as ai_e:
-                    st.error(f"發生錯誤：{e}")
+                    st.error(f"發生錯誤：{ai_e}")
 
