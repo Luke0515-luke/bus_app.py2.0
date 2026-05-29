@@ -198,9 +198,9 @@ if __name__ == '__main__':
                         messages=[
                             {"role": "system", "content": "你是一位專業、友善的台南公車導遊。"},
                             {"role": "user", "content": f"{prompt_content}\n使用者問題 : {user_question}"}
-                    ],
-                        model="llama3-8b-8192",
-                )
+                        ],
+                        model="llama3-8b-8192"
+                    )
                 
                     ai_text = chat_completion.choices[0].message.content
                     st.info(f"AI 助理 : {ai_text}")
