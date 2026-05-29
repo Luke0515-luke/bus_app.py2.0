@@ -184,9 +184,9 @@ if __name__ == '__main__':
        
         # --- 3. AI 對話區 ---
         # --- 3. AI 對話區 ---
-st.divider()
-st.subheader("🤖 問問 AI 助理")
-user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
+        st.divider()
+        st.subheader("🤖 問問 AI 助理")
+        user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
         
 if user_question:
     with st.spinner("AI 正在思考中..."):
