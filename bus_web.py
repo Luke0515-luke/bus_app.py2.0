@@ -205,5 +205,5 @@ if __name__ == '__main__':
                     ai_text = chat_completion.choices[0].message.content
                     st.info(f"AI 助理 : {ai_text}")
                 
-                except:
-                    return "暫時無法取得氣象資訊"
+
+                
