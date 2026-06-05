@@ -14,14 +14,15 @@ else:
     st.error("找不到 GROQ_API_KEY，請檢查 Secrets！")
 
 # --- 2. 預先輸入台南常用公車路線（完全不聯網，速度最快） ---
-ALL_ROUTES = [
-    "2", "5", "6", "14", "18", "19", "70", 
-    "紅幹線", "紅1", "紅2", "紅3", "紅10",
-    "綠幹線", "綠1", "綠2", "綠11", "綠12", "綠17",
-    "藍幹線", "藍1", "藍2", "藍20", "藍23",
-    "橘幹線", "橘3", "橘11", "橘12", "橘20",
-    "黃幹線", "黃1", "黃2", "黃3", "黃4", "黃20", "黃22"
-]
+# --- 2. 預先輸入台南常用公車路線（分類字典格式） ---
+ROUTE_CATEGORIES = {
+    "黃線 (新營/後壁/白河)": ["黃幹線", "黃1", "黃2", "黃3", "黃4", "黃20", "黃22"],
+    "綠線 (玉井/新化)": ["綠幹線", "綠1", "綠2", "綠11", "綠12", "綠17"],
+    "橘線 (佳里/玉井)": ["橘幹線", "橘3", "橘11", "橘12", "橘20"],
+    "藍線 (安平/佳里)": ["藍幹線", "藍1", "藍2", "藍20", "藍23"],
+    "紅線 (關廟/龍崎)": ["紅幹線", "紅1", "紅2", "紅3", "紅10"],
+    "市區數字公車": ["2", "5", "6", "14", "18", "19", "70"]
+}
 
 # --- TDX 驗證與資料處理類別 ---
 auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
@@ -108,22 +109,35 @@ if __name__ == '__main__':
         bus_status = "使用者尚未查詢路線"
 
         # 側邊欄設定
+        # 側邊欄設定
         with st.sidebar:
             st.title("查詢設定")
             
             def reset_search():
                 st.session_state.search_clicked = False
-                
-            # 改動點：直接吃上面寫好的 ALL_ROUTES 清單，不聯網，反應速度極快！
-            route_choice = st.selectbox(
-                "請選擇路線", 
-                ALL_ROUTES,
-                index=None, 
-                placeholder="請點選或輸入路線名稱...",
-                key="bus_route_select",
-                on_change=reset_search 
+
+            # --- 1. 第一層選單：選擇公車顏色或分類 ---
+            category_choice = st.selectbox(
+                "請先選擇公車分類",
+                list(ROUTE_CATEGORIES.keys()), # 自動抓出 "黃線"、"綠線" 等大標題
+                index=None,
+                placeholder="請選擇顏色或分類...",
+                on_change=reset_search
             )
+
+            # --- 2. 第二層選單：根據第一層的選擇，直接從字典撈出對應支線 ---
+            route_choice = None
+            if category_choice:  
+                route_choice = st.selectbox(
+                    "請選擇具體路線", 
+                    ROUTE_CATEGORIES[category_choice], # 直接連動對應的清單
+                    index=None,
+                    placeholder="請選擇支線名稱...",
+                    key="bus_route_select",
+                    on_change=reset_search
+                )
             
+            # --- 3. 第三層選單：選擇起訖站點（保持原本的邏輯） ---
             if route_choice:
                 all_stops = fetch_route_stops(route_choice, h)
                 if all_stops:
@@ -135,7 +149,10 @@ if __name__ == '__main__':
                 else:
                     st.warning("無法載入站點資訊")
             else:
-                st.info("請先在上方選擇一條公車路線。")
+                if category_choice:
+                    st.info("請接著選擇具體的公車支線。")
+                else:
+                    st.info("請先在上方選擇公車分類。")
 
         # --- 3. 公車時刻顯示區：這裡完全不用改！ ---
         # 只要上面的 route_choice 是對的文字（例如 "黃22"），後面的 URL 拼接就會完全正常
