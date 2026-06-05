@@ -221,11 +221,32 @@ if __name__ == '__main__':
 
        
         # --- 4. AI 對話區（已修正縮排與顯示 Bug） ---
+                # --- 3. AI 對話區 ---
         st.divider()
         st.subheader("🤖 問問 AI 助理")
+
+        # 【步驟 1】初始化對話紀錄：如果記憶庫裡沒有歷史紀錄，就開一個空清單
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
+
+        # 【步驟 2】把以前聊過的對話紀錄，全部在畫面上重新畫出來
+        for message in st.session_state.chat_history:
+            if message["role"] == "user":
+                with st.chat_message("user"):
+                    st.write(message["content"])
+            else:
+                with st.chat_message("assistant"):
+                    st.write(message["content"])
+
+        # 【步驟 3】接收使用者的新輸入
         user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
         
         if user_question:
+            # 顯示使用者剛剛打的字，並存入記憶庫
+            with st.chat_message("user"):
+                st.write(user_question)
+            st.session_state.chat_history.append({"role": "user", "content": user_question})
+
             with st.spinner("AI 正在思考中..."):
                 try:  
                     prompt_content = f"【目前天氣】: {current_weather}\n【公車狀態】: {bus_status}"
@@ -233,15 +254,18 @@ if __name__ == '__main__':
                     chat_completion = client.chat.completions.create(
                         messages=[
                             {"role": "system", "content": "你是一位專業、友善的台南公車導遊。"},
+                            # 如果想讓 AI 記得前面的對話脈絡，這裡可以進階串接歷史，但我們先確保畫面留得下來
                             {"role": "user", "content": f"{prompt_content}\n使用者問題 : {user_question}"}
                         ],
                         model="llama-3.3-70b-versatile"
                     )
                 
                     ai_text = chat_completion.choices[0].message.content
-                    st.info(f"AI 助理 : {ai_text}")
-                except Exception as ai_e:                  
-                    st.error(f"抱歉，AI 助理暫時發生錯誤：{ai_e}")
                     
-    except Exception as e:  
-        st.error(f"發生系統錯誤 : {e}")
+                    # 顯示 AI 的回答，並存入記憶庫
+                    with st.chat_message("assistant"):
+                        st.write(ai_text)
+                    st.session_state.chat_history.append({"role": "assistant", "content": ai_text})
+
+                except Exception as ai_e:                 
+                    st.error(f"抱歉，AI 助理暫時發生錯誤：{ai_e}")
