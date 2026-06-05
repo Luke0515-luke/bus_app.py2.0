@@ -222,14 +222,15 @@ if __name__ == '__main__':
        
         # --- 4. AI 對話區（已修正縮排與顯示 Bug） ---
                 # --- 3. AI 對話區 ---
+                # --- 3. AI 對話區 ---
         st.divider()
         st.subheader("🤖 問問 AI 助理")
 
-        # 【步驟 1】初始化對話紀錄：如果記憶庫裡沒有歷史紀錄，就開一個空清單
+        # 【步驟 1】初始化對話紀錄
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
 
-        # 【步驟 2】把以前聊過的對話紀錄，全部在畫面上重新畫出來
+        # 【步驟 2】在網頁畫面上重繪過去的對話（前端顯示）
         for message in st.session_state.chat_history:
             if message["role"] == "user":
                 with st.chat_message("user"):
@@ -238,34 +239,53 @@ if __name__ == '__main__':
                 with st.chat_message("assistant"):
                     st.write(message["content"])
 
-        # 【步驟 3】接收使用者的新輸入
+        # 【步驟 3】接收使用者新輸入
         user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
         
         if user_question:
-            # 顯示使用者剛剛打的字，並存入記憶庫
+            # 立即在畫面上秀出使用者的最新問題
             with st.chat_message("user"):
                 st.write(user_question)
-            st.session_state.chat_history.append({"role": "user", "content": user_question})
 
             with st.spinner("AI 正在思考中..."):
                 try:  
+                    # 這是當前最新的環境變數與問題
                     prompt_content = f"【目前天氣】: {current_weather}\n【公車狀態】: {bus_status}"
+                    current_user_payload = f"{prompt_content}\n使用者問題 : {user_question}"
+                    
+                    # 🧠 【靈魂步驟：建構給 Groq 的記憶包】
+                    # 首先放最基本的人設
+                    groq_messages = [
+                        {"role": "system", "content": "你是一位專業、友善的台南公車導遊。請根據當前的天氣、公車狀態以及使用者之前的對話脈絡，給予貼心流暢的中文回答。"}
+                    ]
+                    
+                    # 接著，把過去聊過的所有歷史紀錄「依序」塞進去給 Groq 看
+                    for hist in st.session_state.chat_history:
+                        groq_messages.append({"role": hist["role"], "content": hist["content"]})
+                    
+                    # 最後，把「當前的天氣動態 + 使用者最新問的問題」當作最後一發子彈塞進去
+                    groq_messages.append({"role": "user", "content": current_user_payload})
                 
+                    # 傳送包含「完整記憶歷史」的封包給 Groq
                     chat_completion = client.chat.completions.create(
-                        messages=[
-                            {"role": "system", "content": "你是一位專業、友善的台南公車導遊。"},
-                            # 如果想讓 AI 記得前面的對話脈絡，這裡可以進階串接歷史，但我們先確保畫面留得下來
-                            {"role": "user", "content": f"{prompt_content}\n使用者問題 : {user_question}"}
-                        ],
+                        messages=groq_messages, # <-- 換成我們精心打包好的記憶矩陣！
                         model="llama-3.3-70b-versatile"
                     )
                 
                     ai_text = chat_completion.choices[0].message.content
-                    st.info(f"AI 助理 : {ai_text}")
+                    
+                    # 在畫面上秀出 AI 的回答
+                    with st.chat_message("assistant"):
+                        st.write(ai_text)
+                    
+                    # 💾 【最後關鍵：把這次的對話存入 session_state 記憶庫】
+                    # 注意：我們存進記憶庫時，使用者這邊「存單純的問題」就好，不要把落落長的天氣公車背景資料存進歷史，這樣下次對話歷史才乾淨。
+                    st.session_state.chat_history.append({"role": "user", "content": user_question})
+                    st.session_state.chat_history.append({"role": "assistant", "content": ai_text})
+
                 except Exception as ai_e:                  
                     st.error(f"抱歉，AI 助理暫時發生錯誤：{ai_e}")
                     
     except Exception as e:  
         st.error(f"發生系統錯誤 : {e}")
-
 
