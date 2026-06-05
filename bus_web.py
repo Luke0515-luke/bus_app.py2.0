@@ -261,11 +261,11 @@ if __name__ == '__main__':
                     )
                 
                     ai_text = chat_completion.choices[0].message.content
-                    
-                    # 顯示 AI 的回答，並存入記憶庫
-                    with st.chat_message("assistant"):
-                        st.write(ai_text)
-                    st.session_state.chat_history.append({"role": "assistant", "content": ai_text})
-
-                except Exception as ai_e:                 
+                    st.info(f"AI 助理 : {ai_text}")
+                except Exception as ai_e:                  
                     st.error(f"抱歉，AI 助理暫時發生錯誤：{ai_e}")
+                    
+    except Exception as e:  
+        st.error(f"發生系統錯誤 : {e}")
+
+
