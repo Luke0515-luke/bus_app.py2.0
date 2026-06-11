@@ -195,7 +195,7 @@ if __name__ == '__main__':
             if cols5[1].button("9", use_container_width=True): st.session_state.selected_filter = "9"; reset_search()
             if cols5[2].button("0", use_container_width=True): st.session_state.selected_filter = "0"; reset_search()
 
-                st.write("") # 留空保持排版整齊
+            st.write("") # 留空保持排版整齊
 
             st.write("") 
             if st.button("❌ 清除篩選條件", use_container_width=True):
