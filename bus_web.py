@@ -1,40 +1,84 @@
-import json
+Import json
 import streamlit as st
 import requests
+import pandas as pd
 from groq import Groq
 
-# 1. 初始化設定
-app_id = st.secrets["CLIENT_ID"]
-app_key = st.secrets["CLIENT_SECRET"]
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+# 1. 讀取 Secrets
+app_id = st.secrets["CLIENT_ID"] 
+app_key = st.secrets["CLIENT_SECRET"] 
 
-# 路線字典
+if "GROQ_API_KEY" in st.secrets: 
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
+else:
+    st.error("找不到 GROQ_API_KEY，請檢查 Secrets！")
+
+# --- 2. 預先輸入大台南公車完整路線分類字典（不需聯網，速度最快） ---
 ROUTE_CATEGORIES = {
-    "黃線": ["黃幹線", "黃1", "黃2", "黃3", "黃4", "黃5", "黃6", "黃6-1", "黃7", "黃9", "黃10", "黃11", "黃11-1", "黃12", "黃13", "黃14", "黃14-1", "黃15", "黃16", "黃20", "黃22", "黃23", "黃24", "黃25"],
-    "棕線": ["棕幹線", "棕1", "棕2", "棕3", "棕3-1", "棕4", "棕5", "棕6", "棕20", "棕10", "棕11"],
-    "綠線": ["綠幹線", "綠1", "綠2","綠2-1", "綠3", "綠4", "綠5", "綠6", "綠7", "綠10", "綠11", "綠12","綠12-1","綠12-2", "綠13", "綠14", "綠15", "綠16", "綠17", "綠20","綠20-1", "綠21", "綠22", "綠23", "綠24", "綠25", "綠26", "綠27", "綠28", "綠29", "綠30","綠30-1", "綠31", "綠32"],
-    "橘線": ["橘幹線", "橘1", "橘2", "橘3", "橘4", "橘4-1", "橘5", "橘6", "橘9", "橘9-1", "橘10", "橘10-1", "橘11", "橘11-1", "橘12", "橘13", "橘14", "橘20"],
-    "藍線": ["藍幹線", "藍1", "藍2", "藍3", "藍4", "藍10", "藍11", "藍13","藍14", "藍15", "藍20", "藍21", "藍22", "藍23", "藍24", "藍25", "藍26", "藍27", "藍28", "藍29", "藍30"],
-    "紅線": ["紅幹線", "紅1", "紅2", "紅3", "紅4", "紅10", "紅11", "紅12", "紅13", "紅14"],
-    "市區": ["0左", "0右", "6", "7", "9", "10", "11", "14", "15", "18", "19", "20", "21", "31", "32", "33", "62","70左", "70右", "77", "98", "101", "102", "103", "107", "111", "168", "901", "902", "904", "905"],
-    "高鐵": ["H31"],
-    "觀光": ["東山咖啡線", "梅嶺線", "菱波官田線", "雙層巴士"]
+    "黃線 (新營/後壁/白河/麻豆)": [
+        "黃幹線", "黃1", "黃2", "黃3", "黃4", "黃5", "黃6", "黃6-1", "黃7", "黃9", 
+        "黃10", "黃11", "黃11-1", "黃12", "黃13", "黃14", "黃14-1", "黃15", "黃16", 
+        "黃20", "黃22", "黃23", "黃24", "黃25"
+    ],
+    "棕線 (新營/鹽水/學甲/佳里)": [
+        "棕幹線", "棕1", "棕2", "棕3", "棕3-1", "棕4", "棕5", "棕6", "棕20", "棕10", "棕11"
+    ],
+    "綠線 (玉井/新化/左鎮/楠西)": [
+        "綠幹線", "綠1", "綠2","綠2-1", "綠3", "綠4", "綠5", "綠6", "綠7", "綠10", "綠11", 
+        "綠12","綠12-1","綠12-2", "綠13", "綠14", "綠15", "綠16", "綠17", "綠20","綠20-1", "綠21", "綠22", 
+        "綠23", "綠24", "綠25", "綠26", "綠27", "綠28", "綠29", "綠30","綠30-1", "綠31", "綠32"
+    ],
+    "橘線 (佳里/麻豆/玉井/大內)": [
+        "橘幹線", "橘1", "橘2", "橘3", "橘4", "橘4-1", "橘5", "橘6", "橘9", "橘9-1", 
+        "橘10", "橘10-1", "橘11", "橘11-1", "橘12", "橘13", "橘14", "橘20"
+    ],
+    "藍線 (安平/佳里/將軍/北門)": [
+        "藍幹線", "藍1", "藍2", "藍3", "藍4", "藍10", "藍11", "藍13","藍14", "藍15", 
+        "藍20", "藍21", "藍22", "藍23", "藍24", "藍25", "藍26", "藍27", "藍28", "藍29", "藍30"
+    ],
+    "紅線 (台南/關廟/龍崎/高鐵)": [
+        "紅幹線", "紅1", "紅2", "紅3", "紅4", "紅10", "紅11", "紅12", 
+        "紅13", "紅14"
+    ],
+    "市區數字公車 (台南市區)": [
+        "0左", "0右", "6", "7", "9", "10", "11", "14", "15", "18", 
+        "19", "20", "21", "31", "32", "33", "62","70左", "70右", "77", "98", "101", "102", "103", "107", "111", "168", 
+        "901", "902", "904", "905"
+    ],
+   "高鐵快捷": [
+        "H31"
+    ],
+    "觀光": [
+        "東山咖啡線", "梅嶺線", "菱波官田線", "雙層巴士"
+    ]
 }
 
-# 2. 驗證與處理類別
-class Auth:
-    def __init__(self, i, k): self.id, self.key = i, k
-    def get_auth_header(self): return {'content-type': 'application/x-www-form-urlencoded', 'grant_type': 'client_credentials', 'client_id': self.id, 'client_secret': self.key}
+# --- TDX 驗證與資料處理類別 ---
+auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
 
-class DataProcessor:
-    def __init__(self, res): self.res = res
-    def get_data_header(self): return {'authorization': f'Bearer {self.res.json().get("access_token")}', 'Accept-Encoding': 'gzip'}
+class Auth():
+    def __init__(self, app_id, app_key):
+        self.app_id = app_id
+        self.app_key = app_key
+    def get_auth_header(self):
+        return {
+            'content-type': 'application/x-www-form-urlencoded',
+            'grant_type': 'client_credentials',
+            'client_id': self.app_id, 
+            'client_secret': self.app_key 
+        }
 
-# 3. 側邊欄與按鈕 (補齊所有數字)
-if "selected_filter" not in st.session_state: st.session_state.selected_filter = None
-with st.sidebar:
-    st.title("🚌 快速路線篩選")
-    labels = ["綠", "橘", "1", "2", "棕", "藍", "3", "4", "紅", "黃", "5", "6", "市區", "高鐵", "7", "8", "觀光", "9", "0"]
+class DataProcessor():
+    def __init__(self, auth_response):
+        self.auth_response = auth_response
+    def get_data_header(self):
+        auth_JSON = self.auth_response.json()
+        access_token = auth_JSON.get('access_token')
+        return {
+            'authorization': f'Bearer {access_token}',
+            'Accept-Encoding': 'gzip'
+        }
+這是我的程式碼    labels = ["綠", "橘", "1", "2", "棕", "藍", "3", "4", "紅", "黃", "5", "6", "市區", "高鐵", "7", "8", "觀光", "9", "0"]
     cols = st.columns(4)
     for i, label in enumerate(labels):
         if cols[i % 4].button(label, use_container_width=True): st.session_state.selected_filter = label
