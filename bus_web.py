@@ -463,8 +463,8 @@ if __name__ == '__main__':
                     bus_status = f"使用者等候路線：{route_choice}（往{st.session_state.dir_toggle}），在 {start_st} 看到的狀態：{json.dumps(ai_log_list, ensure_ascii=False)}"
                 else:
                     st.info("暫時無此方向的站點班次資訊。")
-            else:
-                st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
+                else:
+                    st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
  
 
         # --- 4. AI 對話區（已修正縮排與顯示 Bug） ---
