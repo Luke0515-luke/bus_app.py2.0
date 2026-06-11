@@ -3,13 +3,12 @@ import streamlit as st
 import requests
 from groq import Groq
 
-# 1. 設置與 API 初始化
-app_id = st.secrets["CLIENT_ID"] 
-app_key = st.secrets["CLIENT_SECRET"] 
-if "GROQ_API_KEY" in st.secrets: 
-    client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
+# 1. 初始化設定
+app_id = st.secrets["CLIENT_ID"]
+app_key = st.secrets["CLIENT_SECRET"]
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# 路線分類
+# 路線字典
 ROUTE_CATEGORIES = {
     "黃線": ["黃幹線", "黃1", "黃2", "黃3", "黃4", "黃5", "黃6", "黃6-1", "黃7", "黃9", "黃10", "黃11", "黃11-1", "黃12", "黃13", "黃14", "黃14-1", "黃15", "黃16", "黃20", "黃22", "黃23", "黃24", "黃25"],
     "棕線": ["棕幹線", "棕1", "棕2", "棕3", "棕3-1", "棕4", "棕5", "棕6", "棕20", "棕10", "棕11"],
@@ -22,21 +21,28 @@ ROUTE_CATEGORIES = {
     "觀光": ["東山咖啡線", "梅嶺線", "菱波官田線", "雙層巴士"]
 }
 
-# 輔助狀態管理
-if "selected_filter" not in st.session_state: st.session_state.selected_filter = None
+# 2. 驗證與處理類別
+class Auth:
+    def __init__(self, i, k): self.id, self.key = i, k
+    def get_auth_header(self): return {'content-type': 'application/x-www-form-urlencoded', 'grant_type': 'client_credentials', 'client_id': self.id, 'client_secret': self.key}
 
-# --- 側邊欄：統一的按鈕生成 ---
+class DataProcessor:
+    def __init__(self, res): self.res = res
+    def get_data_header(self): return {'authorization': f'Bearer {self.res.json().get("access_token")}', 'Accept-Encoding': 'gzip'}
+
+# 3. 側邊欄與按鈕 (補齊所有數字)
+if "selected_filter" not in st.session_state: st.session_state.selected_filter = None
 with st.sidebar:
     st.title("🚌 快速路線篩選")
-    # 將按鈕標籤與值定義成清單，確保五排按鈕邏輯統一
     labels = ["綠", "橘", "1", "2", "棕", "藍", "3", "4", "紅", "黃", "5", "6", "市區", "高鐵", "7", "8", "觀光", "9", "0"]
     cols = st.columns(4)
     for i, label in enumerate(labels):
-        if cols[i % 4].button(label, use_container_width=True):
-            st.session_state.selected_filter = label
-    
-    if st.button("❌ 清除篩選", use_container_width=True):
-        st.session_state.selected_filter = None
+        if cols[i % 4].button(label, use_container_width=True): st.session_state.selected_filter = label
+    if st.button("❌ 清除篩選", use_container_width=True): st.session_state.selected_filter = None
+
+# 4. 主程式與資料抓取 (這裡填入你剩下的 fetch_data, AI Chat 等邏輯)
+st.header("🚌 台南公車即時時刻查詢")
+# ... (請將你原本的 API 呼叫、路線選擇邏輯、AI 對話區貼在下方)
 
 # --- 主程式區 ---
 st.header("🚌 台南公車即時時刻查詢")
