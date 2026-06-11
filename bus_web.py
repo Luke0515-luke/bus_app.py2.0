@@ -312,8 +312,12 @@ if __name__ == '__main__':
                         progress_bar = st.progress(0)
                         
                                             # 1. 確保有這行！初始化 HTML 字串容器
-                        html_buffer = '<div class="timeline-container">'
-                        ai_log_list = []
+                                            html_buffer = '<div class="timeline-container">'
+                    ai_log_list = []
+                    
+                    for item in active_list:
+                        s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
+
                     
                     
 
