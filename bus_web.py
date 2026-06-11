@@ -389,8 +389,11 @@ if __name__ == '__main__':
                         </style>
                     """, unsafe_allow_html=True)
 
-                    html_buffer = '<div class="timeline-container">'
-                    ai_log_list = []
+                                        html_buffer += "</div>"
+                    
+                    # ⭕ 請改成這行：強制使用 HTML 組件渲染，並設定高度與捲軸
+                    st.components.v1.html(html_buffer, height=600, scrolling=True)
+
                     
                     for item in active_list:
                         s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
