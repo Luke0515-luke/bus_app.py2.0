@@ -78,7 +78,7 @@ class DataProcessor():
             'authorization': f'Bearer {access_token}',
             'Accept-Encoding': 'gzip'
         }
-這是我的程式碼    labels = ["綠", "橘", "1", "2", "棕", "藍", "3", "4", "紅", "黃", "5", "6", "市區", "高鐵", "7", "8", "觀光", "9", "0"]
+    labels = ["綠", "橘", "1", "2", "棕", "藍", "3", "4", "紅", "黃", "5", "6", "市區", "高鐵", "7", "8", "觀光", "9", "0"]
     cols = st.columns(4)
     for i, label in enumerate(labels):
         if cols[i % 4].button(label, use_container_width=True): st.session_state.selected_filter = label
