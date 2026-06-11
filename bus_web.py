@@ -417,10 +417,7 @@ if __name__ == '__main__':
                         bus_html = ""
                         if plate_number and plate_number != "🧱" and plate_number != "無車牌":
                             wheelchair_text = "♿ 低底盤" if is_low_floor else "一般車"
-                            bus_html = f"""
-                            <span class="bus-tag">🚌 {plate_number} ({car_size})</span>
-                            <span class="wheelchair-tag">{wheelchair_text}</span>
-                            """
+                            bus_html = f'<span class="bus-tag">🚌 {plate_number} ({car_size})</span><span class="wheelchair-tag">{wheelchair_text}</span>'
 
                         html_buffer += f"""
                         <div class="timeline-item">
@@ -444,6 +441,8 @@ if __name__ == '__main__':
                             })
 
                     html_buffer += "</div>"
+                    
+                    # 關鍵：確保直接渲染整段 HTML，不傳給任何會把它當成純文字處理的函式
                     st.markdown(html_buffer, unsafe_allow_html=True)
                     
                     target_st_name = start_st if start_st else "未設定"
@@ -506,3 +505,4 @@ if __name__ == '__main__':
                     
     except Exception as e:  
         st.error(f"發生系統錯誤 : {e}")
+
