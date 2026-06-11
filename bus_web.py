@@ -111,14 +111,19 @@ def fetch_route_stops(route_name, headers_dict):
 
 # 關鍵：當按下按鈕，才會動態抓取公車「即時預估到站時刻」（有快取 30 秒控制頻率）
 @st.cache_data(ttl=30)
-def fetch_bus_data(url, headers_dict):
+# --- 🛠️ 終極精簡聯網：一次把時間、車牌、無障礙全部抓完 ---
+def fetch_bus_data(route_name, headers_dict):
+    # 這個網址其實就包含了：到站時間、當前停靠車牌、以及車輛類型(無障礙)
+    url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/{route_name}?%24format=JSON"
     try:
         res = requests.get(url, headers=headers_dict)
         if res.status_code == 200: 
             return res.json() 
-    except:
+    except Exception as e:
+        st.error(f"即時資料抓取失敗: {e}")
         return None
     return None
+
 
 # 抓取台南即時氣象的函數
 @st.cache_data(ttl=600) 
@@ -361,41 +366,144 @@ if __name__ == '__main__':
 
         # --- 3. 公車時刻顯示區：這裡完全不用改！ ---
         # 只要上面的 route_choice 是對的文字（例如 "黃22"），後面的 URL 拼接就會完全正常
+                # --- 3. 公車時刻顯示區：全功能垂直即時動態時間軸（一次問完、極省 API 版） ---
         if route_choice and st.session_state.get("search_clicked", False):
+            # 呼叫天氣
             weather_info = fetch_weather_data(h)
             current_weather = weather_info 
             
-            url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/{route_choice}?%24format=JSON"
-            bus_list = fetch_bus_data(url, h)
+            # 🎯 這裡只連網一次，拿回包含時間、車牌、無障礙的所有核心資料
+            bus_list = fetch_bus_data(route_choice, h)
             
-            if bus_list:
-                bus_list = sorted(bus_list, key=lambda x: x.get('EstimateTime') if x.get('EstimateTime') is not None else 99999)
-                filtered_list = [
-                    {
-                        "公車路線": route_choice,
-                        "起始站點": stop.get('StopName', {}).get('Zh_tw'),
-                        "預估到站時間": f"{stop.get('EstimateTime') // 60} 分鐘" if stop.get('EstimateTime') is not None else "尚未發車"
-                    }
-                    for stop in bus_list if stop.get('StopName', {}).get('Zh_tw') == start_st
-                ]
+            if bus_list is not None:
+                # 區分去程(0)與回程(1)
+                direction_0 = [item for item in bus_list if item.get("Direction") == 0]
+                direction_1 = [item for item in bus_list if item.get("Direction") == 1]
                 
-                if filtered_list:
-                    st.subheader(f"📍 正在 {start_st} 等候的公車 (往 {end_st})")
-                    st.caption(f"🌡️ 當前天氣：{weather_info}")
-                    st.table(filtered_list)
-                    
-                    bus_status = f"目前在 {start_st} 準備前往 {end_st}。即時動態：{json.dumps(filtered_list, ensure_ascii=False)}"
-                else:
-                    st.info(f"目前 {start_st} 暫無即時到站資訊。")
-                    bus_status = f"目前 {start_st} 暫無即時到站資訊。"
-            else:
-                st.error("無法取得公車資料，請確認 API 狀態。")
+                # 排序（依站牌順序 StopSequence）
+                direction_0 = sorted(direction_0, key=lambda x: x.get('StopSequence', 0))
+                direction_1 = sorted(direction_1, key=lambda x: x.get('StopSequence', 0))
                 
-        elif not route_choice:
-            st.image("https://img.icons8.com/clouds/200/bus.png")
-            st.write("👋 你好！請在左側選單選擇公車路線，或直接在下方詢問 AI 助理。")
+                # 取得終點站名稱作為方向標籤
+                dest_0 = direction_0[-1].get("StopName", {}).get("Zh_tw", "去程") if direction_0 else "去程"
+                dest_1 = direction_1[-1].get("StopName", {}).get("Zh_tw", "回程") if direction_1 else "回程"
 
-       
+                st.subheader(f"🚌 {route_choice} 全線即時動態看板")
+                st.caption(f"🌡️ 當前天氣：{weather_info}")
+
+                # 方向與更新切換按鈕區
+                if "dir_toggle" not in st.session_state:
+                    st.session_state.dir_toggle = "去程"
+                
+                col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1.5, 1])
+                with col_btn1:
+                    if st.button(f"➡️ 往 {dest_0}", use_container_width=True, type="primary" if st.session_state.dir_toggle == "去程" else "secondary"):
+                        st.session_state.dir_toggle = "去程"
+                with col_btn2:
+                    if st.button(f"⬅️ 往 {dest_1}", use_container_width=True, type="primary" if st.session_state.dir_toggle == "回程" else "secondary"):
+                        st.session_state.dir_toggle = "回程"
+                with col_btn3:
+                    if st.button("🔄 重新整理", use_container_width=True):
+                        st.toast("⏳ 正在更新即時站態...", icon="🚌")
+                        st.rerun()
+
+                # 決定當前要顯示的方向
+                active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
+
+                if active_list:
+                    # 🎨 注入自訂網頁前端大台南公車高級 CSS
+                    st.markdown("""
+                        <style>
+                        .timeline-container { position: relative; padding-left: 35px; margin-left: 15px; border-left: 4px solid #4A90E2; }
+                        .timeline-item { position: relative; margin-bottom: 14px; }
+                        .timeline-circle { position: absolute; left: -44px; top: 12px; width: 14px; height: 14px; background-color: white; border: 4px solid #4A90E2; border-radius: 50%; z-index: 2; }
+                        .station-box { display: flex; justify-content: space-between; align-items: center; background-color: #FAFAFA; padding: 10px 15px; border-radius: 8px; border: 1px solid #EAEAEA; }
+                        .station-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+                        .station-name { font-size: 15px; font-weight: bold; color: #333333; }
+                        .bus-tag { background-color: #FF5A5F; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+                        .wheelchair-tag { background-color: #2ECC71; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+                        .time-badge { padding: 5px 12px; border-radius: 20px; color: white; font-weight: bold; font-size: 12px; min-width: 85px; text-align: center; }
+                        .ts-gray { background-color: #BDBDBD; }
+                        .ts-orange { background-color: #FFA726; animation: pulse 1s infinite; }
+                        .ts-green { background-color: #66BB6A; }
+                        @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+                        </style>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown('<div class="timeline-container">', unsafe_allow_html=True)
+                    
+                    ai_log_list = []
+                    for item in active_list:
+                        s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
+                        eta_seconds = item.get("EstimateTime")
+                        stop_status = item.get("StopStatus", 0)
+                        plate_number = item.get("PlateNumb", "")
+                        
+                        # 🎯 【精髓就在這！】直接從這個 item 裡把車型跟無障礙撈出來
+                        # VehicleType: 1=大客車, 2=中客車, 3=一般低底盤(無障礙), 4=特定低底盤
+                        # 或是直接看是否有包含無障礙註記
+                        v_type = item.get("VehicleType")
+                        is_low_floor = (v_type in [3, 4]) or (item.get("IsLowFloor") == True)
+                        
+                        # 判斷車型文字
+                        if v_type == 2:
+                            car_size = "中巴"
+                        else:
+                            car_size = "大巴"
+
+                        # 解析到站時間與燈號
+                        if eta_seconds is None:
+                            if stop_status == 1: time_text = "尚未發車"; badge_cls = "ts-gray"
+                            elif stop_status == 2: time_text = "交管不停"; badge_cls = "ts-gray"
+                            elif stop_status == 3: time_text = "末班車已過"; badge_cls = "ts-gray"
+                            else: time_text = "未發車"; badge_cls = "ts-gray"
+                        elif eta_seconds <= 120:
+                            time_text = "即將進站"
+                            badge_cls = "ts-orange"
+                        else:
+                            time_text = f"{eta_seconds // 60} 分鐘"
+                            badge_cls = "ts-green"
+
+                        # 建立公車圖示與車型、無障礙標籤 (只有當前此站有車牌時才顯示)
+                        bus_html = ""
+                        if plate_number and plate_number != "🧱":
+                            wheelchair_icon = "♿ 低底盤" if is_low_floor else "一般車"
+                            bus_html = f"""
+                            <span class="bus-tag">🚌 {plate_number} ({car_size})</span>
+                            <span class="wheelchair-tag">{wheelchair_icon}</span>
+                            """
+
+                        # 渲染單個精美車站
+                        st.markdown(f"""
+                            <div class="timeline-item">
+                                <div class="timeline-circle"></div>
+                                <div class="station-box">
+                                    <div class="station-info">
+                                        <div class="station-name">{s_name}</div>
+                                        {bus_html}
+                                    </div>
+                                    <div class="time-badge {badge_cls}">{time_text}</div>
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                        # 收集當前等候站資料塞給 AI
+                        if s_name == start_st:
+                            ai_log_list.append({
+                                "當前等候站": s_name, 
+                                "動態": time_text, 
+                                "是否有車在站上": "是" if plate_number else "否",
+                                "車牌": plate_number,
+                                "是否無障礙": "是" if is_low_floor else "否"
+                            })
+
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    bus_status = f"使用者等候路線：{route_choice}（往{st.session_state.dir_toggle}），在 {start_st} 看到的狀態：{json.dumps(ai_log_list, ensure_ascii=False)}"
+                else:
+                    st.info("暫時無此方向的站點班次資訊。")
+            else:
+                st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
+
         # --- 4. AI 對話區（已修正縮排與顯示 Bug） ---
                 # --- 3. AI 對話區 ---
                 # --- 3. AI 對話區 ---
