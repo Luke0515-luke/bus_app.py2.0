@@ -160,6 +160,7 @@ if __name__ == '__main__':
             st.write("請點選顏色或數字進行篩選：")
             
             # 第一排按鈕
+                        # 第一排按鈕
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             with row1_col1:
                 if st.button("綠", use_container_width=True):
@@ -189,12 +190,12 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "藍"
                     reset_search()
             with row2_col3:
-                if st.button("4", use_container_width=True):
-                    st.session_state.selected_filter = "4"
+                if st.button("3", use_container_width=True):
+                    st.session_state.selected_filter = "3"
                     reset_search()
             with row2_col4:
-                if st.button("5", use_container_width=True):
-                    st.session_state.selected_filter = "5"
+                if st.button("4", use_container_width=True):
+                    st.session_state.selected_filter = "4"
                     reset_search()
 
             # 第三排按鈕
@@ -208,12 +209,12 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "黃"
                     reset_search()
             with row3_col3:
-                if st.button("7", use_container_width=True):
-                    st.session_state.selected_filter = "7"
+                if st.button("5", use_container_width=True):
+                    st.session_state.selected_filter = "5"
                     reset_search()
             with row3_col4:
-                if st.button("8", use_container_width=True):
-                    st.session_state.selected_filter = "8"
+                if st.button("6", use_container_width=True):
+                    st.session_state.selected_filter = "6"
                     reset_search()
 
             # 第四排按鈕
@@ -227,13 +228,30 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "高鐵"
                     reset_search()
             with row4_col3:
+                if st.button("7", use_container_width=True):
+                    st.session_state.selected_filter = "7"
+                    reset_search()
+            with row4_col4:
+                if st.button("8", use_container_width=True):
+                    st.session_state.selected_filter = "8"
+                    reset_search()
+
+            # 第五排按鈕
+            row5_col1, row5_col2, row5_col3, row5_col4 = st.columns(4)
+            with row5_col1:
                 if st.button("觀光", use_container_width=True):
                     st.session_state.selected_filter = "觀光"
                     reset_search()
-            with row4_col4:
+            with row5_col2:
+                if st.button("9", use_container_width=True):
+                    st.session_state.selected_filter = "9"
+                    reset_search()
+            with row5_col3:
                 if st.button("0", use_container_width=True):
                     st.session_state.selected_filter = "0"
                     reset_search()
+            with row5_col4:
+                st.write("") # 留空保持排版整齊
 
             st.write("") 
             if st.button("❌ 清除篩選條件", use_container_width=True):
