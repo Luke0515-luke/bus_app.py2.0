@@ -312,10 +312,10 @@ if __name__ == '__main__':
                         progress_bar = st.progress(0)
                         
                                             # 1. 確保有這行！初始化 HTML 字串容器
-                    html_buffer = '<div class="timeline-container">'
-                    ai_log_list = []
                     
-                    for item in active_list:
+                    
+                    
+                    for r_list in ROUTE_CATEGORIES.values():
                         s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
 
                     
@@ -402,12 +402,13 @@ if __name__ == '__main__':
                     html_buffer += "</div>"
                     
         
-                    st.components.v1.html(html_buffer, height=600, scrolling=True)
-                                        # 1. 確保有這行！初始化 HTML 字串容器
+                                            # ⭕ 讓它變成這一段的起頭：
                     html_buffer = '<div class="timeline-container">'
                     ai_log_list = []
-                    
+
                     for item in active_list:
+                        # ... 底下原本的程式碼都不動 ...
+
                         s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
                         eta_seconds = item.get("EstimateTime")
                         stop_status = item.get("StopStatus", 0)
@@ -455,10 +456,12 @@ if __name__ == '__main__':
                                 "是否無障礙": "是" if is_low_floor else "否"
                             })
 
-                    html_buffer += "</div>"
-                    
-                    # 關鍵：確保直接渲染整段 HTML，不傳給任何會把它當成純文字處理的函式
-                    st.markdown(html_buffer, unsafe_allow_html=True)
+               html_buffer += "</div>"
+                  st.components.v1.html(html_buffer, height=600, scrolling=True)
+                         # # 1. 確保有這行！初始化 HTML 字串容器
+                                         html_buffer += "</div>"
+                    st.components.v1.html(html_buffer, height=600, scrolling=True)
+
                     
                     target_st_name = start_st if start_st else "未設定"
                     bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
