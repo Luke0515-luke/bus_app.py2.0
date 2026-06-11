@@ -389,7 +389,7 @@ if __name__ == '__main__':
                         </style>
                     """, unsafe_allow_html=True)
 
-                                        html_buffer += "</div>"
+                    html_buffer += "</div>"
                     
                     # ⭕ 請改成這行：強制使用 HTML 組件渲染，並設定高度與捲軸
                     st.components.v1.html(html_buffer, height=600, scrolling=True)
