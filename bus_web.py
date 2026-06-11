@@ -143,10 +143,7 @@ if __name__ == '__main__':
         # 側邊欄設定
         # 側邊欄設定
                 # 側邊欄設定
-                # 側邊欄設定
-                # --- 側邊欄設定：快速路線篩選鍵盤與選單（已優化排序與 Bug 修正） ---
-                # --- 側邊欄設定：快速路線篩選鍵盤與選單（已整合高鐵與觀光公車功能） ---
-                # --- 側邊欄設定：快速路線篩選鍵盤與選單（已將高鐵與觀光公車完全拆分） ---
+                # --- 側邊欄設定：快速路線篩選鍵盤與選單（已修正高鐵、觀光按鈕衝突問題） ---
         with st.sidebar:
             st.title("🚌 快速路線篩選")
             
@@ -215,7 +212,7 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "8"
                     reset_search()
 
-            # 第四排按鈕：市區、高鐵、觀光、0 (完全拆分，排版超整齊)
+            # 第四排按鈕：市區、高鐵、觀光、0 (完全拆分)
             row4_col1, row4_col2, row4_col3, row4_col4 = st.columns(4)
             with row4_col1:
                 if st.button("市區", use_container_width=True):
@@ -234,8 +231,8 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "0"
                     reset_search()
 
-            st.write("") # 留一點小空隙
-            # 獨立的清除篩選按鈕：寬敞又好看
+            st.write("") 
+            # 獨立的清除篩選按鈕
             if st.button("❌ 清除篩選條件", use_container_width=True):
                 st.session_state.selected_filter = None
                 reset_search()
@@ -243,9 +240,9 @@ if __name__ == '__main__':
             # 顯示目前篩選狀態提示
             current_filter = st.session_state.selected_filter
             if current_filter == "高鐵":
-                st.success("目前已選擇篩選：【高鐵快捷公車 (H線)】")
+                st.success("目前已選擇篩選：【高鐵快捷公車】")
             elif current_filter == "觀光":
-                st.success("目前已選擇篩選：【台南特色觀光公車】")
+                st.success("目前已選擇篩選：【大台南觀光巴士】")
             elif current_filter:
                 st.success(f"目前已選擇篩選：【{current_filter}】")
             else:
@@ -266,11 +263,11 @@ if __name__ == '__main__':
             elif current_filter == "市區":
                 filtered_routes = ROUTE_CATEGORIES["市區數字公車 (台南市區)"]
             elif current_filter == "高鐵":
-                # 💡 只過濾出高鐵快捷（名稱內帶有 H 的公車）
-                filtered_routes = [r for r in ROUTE_CATEGORIES["高鐵快捷與觀光線路"] if "H" in r]
+                # 💡 精準對應：直接去抓你開頭寫的 "高鐵快捷" 路線清單
+                filtered_routes = ROUTE_CATEGORIES["高鐵快捷"]
             elif current_filter == "觀光":
-                # 💡 只過濾出觀光路線（排除快捷 H31，留下其餘的觀光路線）
-                filtered_routes = [r for r in ROUTE_CATEGORIES["高鐵快捷與觀光線路"] if "H" not in r]
+                # 💡 精準對應：直接去抓你開頭寫的 "觀光" 路線清單
+                filtered_routes = ROUTE_CATEGORIES["觀光"]
             else:
                 raw_filtered = [r for r in all_possible_routes if current_filter in r]
                 
@@ -309,9 +306,10 @@ if __name__ == '__main__':
                     if st.button("🔍 開始查詢即時動態", type="primary"):
                         st.session_state.search_clicked = True
                 else:
-                    st.warning("無法載入站點資訊")
+                    st.warning(f"⚠️ 無法載入【{route_choice}】的站點資訊。")
             else:
                 st.info("請先點選上方按鈕或在選單中選擇路線。")
+
 
         # --- 3. 公車時刻顯示區：這裡完全不用改！ ---
         # 只要上面的 route_choice 是對的文字（例如 "黃22"），後面的 URL 拼接就會完全正常
