@@ -511,3 +511,8 @@ if __name__ == '__main__':
                     
     except Exception as e:  
         st.error(f"發生系統錯誤 : {e}")
+
+                    
+    except Exception as e:  
+        st.error(f"發生系統錯誤 : {e}")
+
