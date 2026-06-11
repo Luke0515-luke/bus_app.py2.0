@@ -144,6 +144,7 @@ def fetch_weather_data(headers_dict):
 
 # --- 程式執行主體 ---
 # --- 程式執行主體 ---
+# --- 程式執行主體 ---
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時時刻查詢")
@@ -159,7 +160,10 @@ if __name__ == '__main__':
         current_weather = "使用者尚未查詢"
         bus_status = "使用者尚未查詢路線"
 
-        # --- 側邊欄設定：快速路線篩選鍵盤與選單 ---
+        # 側邊欄設定
+        # 側邊欄設定
+                # 側邊欄設定
+                # --- 側邊欄設定：快速路線篩選鍵盤與選單（已修正高鐵、觀光按鈕衝突問題） ---
         with st.sidebar:
             st.title("🚌 快速路線篩選")
             
@@ -171,70 +175,89 @@ if __name__ == '__main__':
 
             st.write("請點選顏色或數字進行篩選：")
             
-            # 第一排按鈕
+            # 第一排按鈕：綠、橘、1、2
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             with row1_col1:
                 if st.button("綠", use_container_width=True):
-                    st.session_state.selected_filter = "綠"; reset_search()
+                    st.session_state.selected_filter = "綠"
+                    reset_search()
             with row1_col2:
                 if st.button("橘", use_container_width=True):
-                    st.session_state.selected_filter = "橘"; reset_search()
+                    st.session_state.selected_filter = "橘"
+                    reset_search()
             with row1_col3:
                 if st.button("1", use_container_width=True):
-                    st.session_state.selected_filter = "1"; reset_search()
+                    st.session_state.selected_filter = "1"
+                    reset_search()
             with row1_col4:
                 if st.button("2", use_container_width=True):
-                    st.session_state.selected_filter = "2"; reset_search()
+                    st.session_state.selected_filter = "2"
+                    reset_search()
 
-            # 第二排按鈕
+            # 第二排按鈕：棕、藍、4、5
             row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
             with row2_col1:
                 if st.button("棕", use_container_width=True):
-                    st.session_state.selected_filter = "棕"; reset_search()
+                    st.session_state.selected_filter = "棕"
+                    reset_search()
             with row2_col2:
                 if st.button("藍", use_container_width=True):
-                    st.session_state.selected_filter = "藍"; reset_search()
+                    st.session_state.selected_filter = "藍"
+                    reset_search()
             with row2_col3:
                 if st.button("4", use_container_width=True):
-                    st.session_state.selected_filter = "4"; reset_search()
+                    st.session_state.selected_filter = "4"
+                    reset_search()
             with row2_col4:
                 if st.button("5", use_container_width=True):
-                    st.session_state.selected_filter = "5"; reset_search()
+                    st.session_state.selected_filter = "5"
+                    reset_search()
 
-            # 第三排按鈕
+            # 第三排按鈕：紅、黃、7、8
             row3_col1, row3_col2, row3_col3, row3_col4 = st.columns(4)
             with row3_col1:
                 if st.button("紅", use_container_width=True):
-                    st.session_state.selected_filter = "紅"; reset_search()
+                    st.session_state.selected_filter = "紅"
+                    reset_search()
             with row3_col2:
                 if st.button("黃", use_container_width=True):
-                    st.session_state.selected_filter = "黃"; reset_search()
+                    st.session_state.selected_filter = "黃"
+                    reset_search()
             with row3_col3:
                 if st.button("7", use_container_width=True):
-                    st.session_state.selected_filter = "7"; reset_search()
+                    st.session_state.selected_filter = "7"
+                    reset_search()
             with row3_col4:
                 if st.button("8", use_container_width=True):
-                    st.session_state.selected_filter = "8"; reset_search()
+                    st.session_state.selected_filter = "8"
+                    reset_search()
 
-            # 第四排按鈕
+            # 第四排按鈕：市區、高鐵、觀光、0 (完全拆分)
             row4_col1, row4_col2, row4_col3, row4_col4 = st.columns(4)
             with row4_col1:
                 if st.button("市區", use_container_width=True):
-                    st.session_state.selected_filter = "市區"; reset_search()
+                    st.session_state.selected_filter = "市區"
+                    reset_search()
             with row4_col2:
                 if st.button("高鐵", use_container_width=True):
-                    st.session_state.selected_filter = "高鐵"; reset_search()
+                    st.session_state.selected_filter = "高鐵"
+                    reset_search()
             with row4_col3:
                 if st.button("觀光", use_container_width=True):
-                    st.session_state.selected_filter = "觀光"; reset_search()
+                    st.session_state.selected_filter = "觀光"
+                    reset_search()
             with row4_col4:
                 if st.button("0", use_container_width=True):
-                    st.session_state.selected_filter = "0"; reset_search()
+                    st.session_state.selected_filter = "0"
+                    reset_search()
 
             st.write("") 
+            # 獨立的清除篩選按鈕
             if st.button("❌ 清除篩選條件", use_container_width=True):
-                st.session_state.selected_filter = None; reset_search()
+                st.session_state.selected_filter = None
+                reset_search()
 
+            # 顯示目前篩選狀態提示
             current_filter = st.session_state.selected_filter
             if current_filter == "高鐵":
                 st.success("目前已選擇篩選：【高鐵快捷公車】")
@@ -250,32 +273,40 @@ if __name__ == '__main__':
             for routes_list in ROUTE_CATEGORIES.values():
                 all_possible_routes.extend(routes_list)
             
+            # 依據 ROUTE_CATEGORIES 定義的順序去重
             seen = set()
             all_possible_routes = [x for x in all_possible_routes if not (x in seen or seen.add(x))]
 
+            # 開始過濾選單內容
             if current_filter is None:
                 filtered_routes = all_possible_routes
             elif current_filter == "市區":
                 filtered_routes = ROUTE_CATEGORIES["市區數字公車 (台南市區)"]
             elif current_filter == "高鐵":
+                # 💡 精準對應：直接去抓你開頭寫的 "高鐵快捷" 路線清單
                 filtered_routes = ROUTE_CATEGORIES["高鐵快捷"]
             elif current_filter == "觀光":
+                # 💡 精準對應：直接去抓你開頭寫的 "觀光" 路線清單
                 filtered_routes = ROUTE_CATEGORIES["觀光"]
             else:
                 raw_filtered = [r for r in all_possible_routes if current_filter in r]
+                
+                # 數字「0」的智慧高亮置頂排序
                 if current_filter.isdigit():
                     def custom_numeric_sort(route_str):
                         just_nums = ''.join([c for c in route_str if c.isdigit()])
                         if just_nums:
                             val = int(just_nums)
-                            if route_str.startswith(current_filter): return (0, val, route_str)
+                            if route_str.startswith(current_filter):
+                                return (0, val, route_str)
                             return (1, val, route_str)
                         return (2, 999, route_str)
+                    
                     filtered_routes = sorted(raw_filtered, key=custom_numeric_sort)
                 else:
                     filtered_routes = raw_filtered
 
-            # 【核心步驟 4】第二層選單
+            # 【核心步驟 4】第二層選單：只顯示篩選過且完美排序的公車路線
             route_choice = st.selectbox(
                 "請選擇公車路線", 
                 filtered_routes,
@@ -285,21 +316,20 @@ if __name__ == '__main__':
                 on_change=reset_search
             )
             
-            # 【核心步驟 5】第三層選單：改為一選路線就自動開啟右側看板權限
+            # 【核心步驟 5】第三層選單：起訖站點
             if route_choice:
-                st.session_state.search_clicked = True
                 all_stops = fetch_route_stops(route_choice, h)
                 if all_stops:
-                    start_st = st.selectbox("請選擇起始站 (可選)", all_stops, index=0, key="start_select")
+                    start_st = st.selectbox("請選擇起始站", all_stops, key="start_select")
                     end_st = st.selectbox("請選擇目的地 (僅作路徑參考)", all_stops, index=len(all_stops)-1, key="end_select")
+                    
+                    if st.button("🔍 開始查詢即時動態", type="primary"):
+                        st.session_state.search_clicked = True
                 else:
                     st.warning(f"⚠️ 無法載入【{route_choice}】的站點資訊。")
-                    start_st = None
             else:
                 st.info("請先點選上方按鈕或在選單中選擇路線。")
-                start_st = None
-
-            # --- 🛠️ 專屬後台：手動更新快取工具 ---
+                        # --- 🛠️ 專屬後台：每個月手動更新全台南站點快取按鈕 ---
             st.write("---")
             with st.expander("⚙️ 系統維護工具"):
                 st.caption("每個月或台南公車大改點時，點擊下方按鈕一次即可。")
@@ -307,9 +337,12 @@ if __name__ == '__main__':
                     with st.spinner("正在將全台南公車站點離線化，請稍候..."):
                         all_cache = {}
                         progress_bar = st.progress(0)
+                        
+                        # 攤平所有要抓取的路線
                         all_routes_to_fetch = []
                         for r_list in ROUTE_CATEGORIES.values():
                             all_routes_to_fetch.extend(r_list)
+                        # 去重
                         all_routes_to_fetch = list(set(all_routes_to_fetch))
                         total_routes = len(all_routes_to_fetch)
 
@@ -323,13 +356,18 @@ if __name__ == '__main__':
                                         all_cache[r_name] = [s['StopName']['Zh_tw'] for s in d_json[0]['Stops']]
                             except:
                                 all_cache[r_name] = []
+                            # 更新進度條
                             progress_bar.progress((idx + 1) / total_routes)
                         
+                        # 寫入本機 JSON 檔案
                         with open("tainan_stops_cache.json", "w", encoding="utf-8") as f:
                             json.dump(all_cache, f, ensure_ascii=False, indent=4)
                         st.success("🎉 全台南站點快取建立成功！已完美離線化。")
 
-        # --- 3. 公車時刻顯示區：全功能垂直即時動態時間軸（往返同步、紅色警示燈優化版） ---
+
+
+        # --- 3. 公車時刻顯示區：這裡完全不用改！ ---
+        # 只要上面的 route_choice 是對的文字（例如 "黃22"），後面的 URL 拼接就會完全正常
         if route_choice and st.session_state.get("search_clicked", False):
             weather_info = fetch_weather_data(h)
             current_weather = weather_info 
@@ -369,7 +407,7 @@ if __name__ == '__main__':
                 active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
 
                 if active_list:
-                    # 🎨 注入 CSS 樣式
+                    # 🎨 注入 CSS 樣式 (精準替換衣服：修改與新增紅、橘燈號顏色深淺)
                     st.markdown("""
                         <style>
                         .timeline-container { position: relative; padding-left: 35px; margin-left: 15px; border-left: 4px solid #4A90E2; padding-top: 10px; padding-bottom: 10px; }
@@ -382,14 +420,13 @@ if __name__ == '__main__':
                         .wheelchair-tag { background-color: #2ECC71; color: white; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; }
                         .time-badge { padding: 6px 12px; border-radius: 20px; color: white; font-weight: bold; font-size: 12px; min-width: 90px; text-align: center; display: inline-block; }
                         .ts-gray { background-color: #BDBDBD; }
-                        .ts-red { background-color: #D32F2F; animation: pulse 0.8s infinite; }
-                        .ts-orange { background-color: #FFA726; }
+                        .ts-red { background-color: #D32F2F !important; color: white !important; } /* 🎯 修正：2分鐘內緊急紅色 */
+                        .ts-orange { background-color: #FFA726 !important; color: white !important; } /* 🎯 修正：3分鐘內警告橘色 */
                         .ts-green { background-color: #66BB6A; }
-                        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
                         </style>
                     """, unsafe_allow_html=True)
 
-                    # 💡 用大字串緩衝區拼接完整的 HTML，解決 </div> 亂碼問題
+                    # 💡 用大字串緩衝區拼接完整的 HTML，徹底解決 </div> 亂碼問題
                     html_buffer = '<div class="timeline-container">'
                     ai_log_list = []
                     
@@ -403,7 +440,7 @@ if __name__ == '__main__':
                         is_low_floor = (v_type in [3, 4]) or (item.get("IsLowFloor") == True)
                         car_size = "中巴" if v_type == 2 else "大巴"
 
-                        # 燈號判斷邏輯 (<=2分鐘紅燈閃爍, <=3分鐘橘燈)
+                        # 🎯 重新調校後的精準時間燈號與文字判定邏輯 (<=2分紅燈, <=3分橘燈)
                         if eta_seconds is None:
                             if stop_status == 1: time_text = "尚未發車"; badge_cls = "ts-gray"
                             elif stop_status == 2: time_text = "交管不停"; badge_cls = "ts-gray"
@@ -427,7 +464,7 @@ if __name__ == '__main__':
                             <span class="wheelchair-tag">{wheelchair_text}</span>
                             """
 
-                        # 將各車站節點加進大字串包中
+                        # 將各車站節點加進大字串包中，結構完美閉合
                         html_buffer += f"""
                         <div class="timeline-item">
                             <div class="timeline-circle"></div>
@@ -441,33 +478,36 @@ if __name__ == '__main__':
                         </div>
                         """
 
+                        # 收集當前等候站資料塞給 AI
                         if start_st and s_name == start_st:
                             ai_log_list.append({
                                 "當前等候站": s_name, 
                                 "動態": time_text, 
+                                "是否有車在站上": "是" if plate_number else "否",
                                 "車牌": plate_number,
                                 "是否無障礙": "是" if is_low_floor else "否"
                             })
 
-                    # 閉合隱形容器
+                    # 閉合大容器
                     html_buffer += "</div>"
                     
-                    # 🎯 單次輸出，完美閉合結構
+                    # 🎯 單次輸出，完美閉合結構，亂碼完全消失！
                     st.markdown(html_buffer, unsafe_allow_html=True)
                     
                     target_st_name = start_st if start_st else "未設定"
-                    bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
+                    bus_status = f"使用者等候路線：{route_choice}（往{st.session_state.dir_toggle}），在 {target_st_name} 看到的狀態：{json.dumps(ai_log_list, ensure_ascii=False)}"
                 else:
                     st.info("暫時無此方向的站點班次資訊。")
             else:
                 st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
                 
         else:
-            # 💡 這裡對齊一開始的 if route_choice 判斷
+            # 💡 完美對齊外層的 if 判斷
             st.info("請在左側選單選擇公車路線以查看即時動態看板。")
 
     except Exception as main_err:
         st.error(f"系統執行主體發生錯誤: {main_err}")
+
 
         # --- 4. AI 對話區（已修正縮排與顯示 Bug） ---
                 # --- 3. AI 對話區 ---
