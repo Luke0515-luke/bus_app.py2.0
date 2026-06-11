@@ -84,7 +84,19 @@ class DataProcessor():
 
 # 當使用者選了路線，才去 TDX 抓該路線的「所有站點」清單（有快取 1 小時）
 @st.cache_data(ttl=3600)
+# --- 🛠️ 離線站點快取讀取機制（極省 API 用量關鍵） ---
 def fetch_route_stops(route_name, headers_dict):
+    # 1. 嘗試讀取本機的靜態站點快取 JSON
+    try:
+        with open("tainan_stops_cache.json", "r", encoding="utf-8") as f:
+            local_cache = json.load(f)
+            if route_name in local_cache and local_cache[route_name]:
+                return local_cache[route_name]
+    except FileNotFoundError:
+        # 如果還沒產生 json 檔，就放行讓它去抓 API，確保程式不當機
+        pass
+
+    # 2. 如果本機快取找不到，才勉為其難去抓 TDX API
     stops_url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/Tainan/{route_name}?%24format=JSON"
     try:
         res = requests.get(stops_url, headers=headers_dict)
@@ -95,6 +107,7 @@ def fetch_route_stops(route_name, headers_dict):
     except:
         return []
     return []
+
 
 # 關鍵：當按下按鈕，才會動態抓取公車「即時預估到站時刻」（有快取 30 秒控制頻率）
 @st.cache_data(ttl=30)
@@ -309,6 +322,41 @@ if __name__ == '__main__':
                     st.warning(f"⚠️ 無法載入【{route_choice}】的站點資訊。")
             else:
                 st.info("請先點選上方按鈕或在選單中選擇路線。")
+                        # --- 🛠️ 專屬後台：每個月手動更新全台南站點快取按鈕 ---
+            st.write("---")
+            with st.expander("⚙️ 系統維護工具"):
+                st.caption("每個月或台南公車大改點時，點擊下方按鈕一次即可。它會將所有站點下載存成本機檔案，之後不論誰用、換什麼帳號，載入選單都不再消耗 TDX 額度！")
+                if st.button("🔄 預載並更新全台南站點資料 (一個月點一次)", use_container_width=True):
+                    with st.spinner("正在將全台南公車站點離線化，請稍候..."):
+                        all_cache = {}
+                        progress_bar = st.progress(0)
+                        
+                        # 攤平所有要抓取的路線
+                        all_routes_to_fetch = []
+                        for r_list in ROUTE_CATEGORIES.values():
+                            all_routes_to_fetch.extend(r_list)
+                        # 去重
+                        all_routes_to_fetch = list(set(all_routes_to_fetch))
+                        total_routes = len(all_routes_to_fetch)
+
+                        for idx, r_name in enumerate(all_routes_to_fetch):
+                            s_url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/Tainan/{r_name}?%24format=JSON"
+                            try:
+                                response = requests.get(s_url, headers=h)
+                                if response.status_code == 200:
+                                    d_json = response.json()
+                                    if d_json:
+                                        all_cache[r_name] = [s['StopName']['Zh_tw'] for s in d_json[0]['Stops']]
+                            except:
+                                all_cache[r_name] = []
+                            # 更新進度條
+                            progress_bar.progress((idx + 1) / total_routes)
+                        
+                        # 寫入本機 JSON 檔案
+                        with open("tainan_stops_cache.json", "w", encoding="utf-8") as f:
+                            json.dump(all_cache, f, ensure_ascii=False, indent=4)
+                        st.success("🎉 全台南站點快取建立成功！已完美離線化。")
+
 
 
         # --- 3. 公車時刻顯示區：這裡完全不用改！ ---
