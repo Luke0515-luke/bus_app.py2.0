@@ -78,11 +78,7 @@ class DataProcessor():
             'authorization': f'Bearer {access_token}',
             'Accept-Encoding': 'gzip'
         }
-    labels = ["綠", "橘", "1", "2", "棕", "藍", "3", "4", "紅", "黃", "5", "6", "市區", "高鐵", "7", "8", "觀光", "9", "0"]
-    cols = st.columns(4)
-    for i, label in enumerate(labels):
-        if cols[i % 4].button(label, use_container_width=True): st.session_state.selected_filter = label
-    if st.button("❌ 清除篩選", use_container_width=True): st.session_state.selected_filter = None
+    
 
 # 4. 主程式與資料抓取 (這裡填入你剩下的 fetch_data, AI Chat 等邏輯)
 
