@@ -311,7 +311,12 @@ if __name__ == '__main__':
                         all_cache = {}
                         progress_bar = st.progress(0)
                         
-                        all_routes_to_fetch = []
+                                            # 1. 確保有這行！初始化 HTML 字串容器
+                        html_buffer = '<div class="timeline-container">'
+                        ai_log_list = []
+                    
+                    
+
                         for r_list in ROUTE_CATEGORIES.values():
                             all_routes_to_fetch.extend(r_list)
                         all_routes_to_fetch = list(set(all_routes_to_fetch))
