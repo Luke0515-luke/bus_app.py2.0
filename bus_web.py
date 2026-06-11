@@ -169,19 +169,6 @@ if __name__ == '__main__':
            
 
             
-            # 【核心步驟 5】第三層選單：選起訖站點（保持原本的邏輯）
-            if route_choice:
-                all_stops = fetch_route_stops(route_choice, h)
-                if all_stops:
-                    start_st = st.selectbox("請選擇起始站", all_stops, key="start_select")
-                    end_st = st.selectbox("請選擇目的地 (僅作路徑參考)", all_stops, index=len(all_stops)-1, key="end_select")
-                    
-                    if st.button("🔍 開始查詢即時動態", type="primary"):
-                        st.session_state.search_clicked = True
-                else:
-                    st.warning("無法載入站點資訊")
-            else:
-                st.info("請先點選上方按鈕或在選單中選擇路線。")
 
             # --- 3. 第三層選單：選擇起訖站點（保持原本的邏輯） ---
             if route_choice:
