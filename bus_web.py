@@ -142,6 +142,7 @@ if __name__ == '__main__':
                 # 側邊欄設定
                 # 側邊欄設定
                 # --- 側邊欄設定：快速路線篩選鍵盤與選單（已優化排序與 Bug 修正） ---
+                # --- 側邊欄設定：快速路線篩選鍵盤與選單（已整合高鐵與觀光公車功能） ---
         with st.sidebar:
             st.title("🚌 快速路線篩選")
             
@@ -210,15 +211,15 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "8"
                     reset_search()
 
-            # 第四排按鈕：市區、高鐵、0、❌
+            # 第四排按鈕：市區、高鐵觀光、0、❌ (清除)
             row4_col1, row4_col2, row4_col3, row4_col4 = st.columns(4)
             with row4_col1:
                 if st.button("市區", use_container_width=True):
                     st.session_state.selected_filter = "市區"
                     reset_search()
             with row4_col2:
-                if st.button("高鐵", use_container_width=True):
-                    st.session_state.selected_filter = "H"
+                if st.button("高鐵觀光", use_container_width=True):
+                    st.session_state.selected_filter = "觀光"  # 設定特殊篩選標記
                     reset_search()
             with row4_col3:
                 if st.button("0", use_container_width=True):
@@ -231,50 +232,49 @@ if __name__ == '__main__':
 
             # 顯示目前篩選狀態
             current_filter = st.session_state.selected_filter
-            if current_filter:
-                st.success(f"目前已選擇篩選：【{current_filter}】")
+            if current_filter == "觀光":
+                st.success("目前已選擇篩選：【高鐵快捷 & 觀光線路】")
+            elif current_filter:
+                st.success(f"Currently filtering by: 【{current_filter}】")
             else:
                 st.info("目前顯示：全部路線")
 
-            # ==================== 💡 排序優化程式碼放在這裡 ====================
+            # --- 🛠️ 篩選與排序優化核心邏輯 ---
             all_possible_routes = []
             for routes_list in ROUTE_CATEGORIES.values():
                 all_possible_routes.extend(routes_list)
             
-            # 絕招一：不要用內建 sorted() 亂排，直接照你在 ROUTE_CATEGORIES 打的順序，進行去重
+            # 照 ROUTE_CATEGORIES 的原始手打順序進行去重，保留完美排列
             seen = set()
             all_possible_routes = [x for x in all_possible_routes if not (x in seen or seen.add(x))]
 
-            # 開始進行過濾邏輯
+            # 開始進行過濾
             if current_filter is None:
                 filtered_routes = all_possible_routes
             elif current_filter == "市區":
                 filtered_routes = ROUTE_CATEGORIES["市區數字公車 (台南市區)"]
+            elif current_filter == "觀光":
+                # 💡 成功撈出高鐵快捷與觀光線路群組內的所有公車！
+                filtered_routes = ROUTE_CATEGORIES["高鐵快捷與觀光線路"]
             else:
-                # 篩選包含該關鍵字（例如 "綠" 或 "0"）的路線
                 raw_filtered = [r for r in all_possible_routes if current_filter in r]
                 
-                # 絕招二：當篩選純數字（如 "0"）時，啟動高亮置頂排序邏輯
+                # 數字「0」的智慧高亮置頂排序
                 if current_filter.isdigit():
                     def custom_numeric_sort(route_str):
-                        # 移除字母干擾，只拿數字來比較
                         just_nums = ''.join([c for c in route_str if c.isdigit()])
                         if just_nums:
                             val = int(just_nums)
-                            # 如果這個路線「開頭第一位」就是選中的數字（如 0左），列為最高優先度
                             if route_str.startswith(current_filter):
                                 return (0, val, route_str)
-                            # 如果數字在後面（如 101 的 0 在中間），權重較低排在後面
                             return (1, val, route_str)
                         return (2, 999, route_str)
                     
                     filtered_routes = sorted(raw_filtered, key=custom_numeric_sort)
                 else:
-                    # 如果是顏色（綠、黃等），直接完美繼承你在 ROUTE_CATEGORIES 裡由小到大的手打順序！
                     filtered_routes = raw_filtered
-            # ==================================================================
 
-            # 【核心步驟 4】第二層選單：只顯示被篩選且完美排序過後的公車路線
+            # 【核心步驟 4】第二層選單：只顯示篩選過且完美排序的公車路線
             route_choice = st.selectbox(
                 "請選擇公車路線", 
                 filtered_routes,
@@ -284,7 +284,7 @@ if __name__ == '__main__':
                 on_change=reset_search
             )
             
-            # 【核心步驟 5】第三層選單：選起訖站點（全程式只保留這一段，防範 Duplicate ID）
+            # 【核心步驟 5】第三層選單：起訖站點
             if route_choice:
                 all_stops = fetch_route_stops(route_choice, h)
                 if all_stops:
