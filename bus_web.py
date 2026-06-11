@@ -141,17 +141,16 @@ if __name__ == '__main__':
         # 側邊欄設定
                 # 側邊欄設定
                 # 側邊欄設定
+                # --- 側邊欄設定：快速路線篩選鍵盤與選單（已優化排序與 Bug 修正） ---
         with st.sidebar:
             st.title("🚌 快速路線篩選")
             
             def reset_search():
                 st.session_state.search_clicked = False
 
-            # 【核心步驟 1】初始化按鈕的記憶狀態
             if "selected_filter" not in st.session_state:
-                st.session_state.selected_filter = None  # 一開始沒有選任何按鈕
+                st.session_state.selected_filter = None
 
-            # 【核心步驟 2】打造像手機 App 一樣的按鈕鍵盤排版 (4欄位)
             st.write("請點選顏色或數字進行篩選：")
             
             # 第一排按鈕：綠、橘、1、2
@@ -211,7 +210,7 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "8"
                     reset_search()
 
-            # 第四排按鈕：市區、H(高鐵)、0、清除
+            # 第四排按鈕：市區、高鐵、0、❌
             row4_col1, row4_col2, row4_col3, row4_col4 = st.columns(4)
             with row4_col1:
                 if st.button("市區", use_container_width=True):
@@ -227,7 +226,7 @@ if __name__ == '__main__':
                     reset_search()
             with row4_col4:
                 if st.button("❌", use_container_width=True):
-                    st.session_state.selected_filter = None  # 清除篩選
+                    st.session_state.selected_filter = None
                     reset_search()
 
             # 顯示目前篩選狀態
@@ -237,27 +236,45 @@ if __name__ == '__main__':
             else:
                 st.info("目前顯示：全部路線")
 
-            # 【核心步驟 3】根據點擊的按鈕，動態過濾出「符合條件」的公車支線清單
-            filtered_routes = []
-            
-            # 撈出我們在頂部 ROUTE_CATEGORIES 定義的所有公車代號
+            # ==================== 💡 排序優化程式碼放在這裡 ====================
             all_possible_routes = []
             for routes_list in ROUTE_CATEGORIES.values():
                 all_possible_routes.extend(routes_list)
-            # 去除重複值並排序
-            all_possible_routes = sorted(list(set(all_possible_routes)))
+            
+            # 絕招一：不要用內建 sorted() 亂排，直接照你在 ROUTE_CATEGORIES 打的順序，進行去重
+            seen = set()
+            all_possible_routes = [x for x in all_possible_routes if not (x in seen or seen.add(x))]
 
             # 開始進行過濾邏輯
             if current_filter is None:
                 filtered_routes = all_possible_routes
             elif current_filter == "市區":
-                # 撈出純數字或是包含左右環狀線的市區公車
                 filtered_routes = ROUTE_CATEGORIES["市區數字公車 (台南市區)"]
             else:
-                # 如果選了「黃」，就撈出名稱有「黃」的公車；選了「2」，就撈出名稱有「2」的公車
-                filtered_routes = [r for r in all_possible_routes if current_filter in r]
+                # 篩選包含該關鍵字（例如 "綠" 或 "0"）的路線
+                raw_filtered = [r for r in all_possible_routes if current_filter in r]
+                
+                # 絕招二：當篩選純數字（如 "0"）時，啟動高亮置頂排序邏輯
+                if current_filter.isdigit():
+                    def custom_numeric_sort(route_str):
+                        # 移除字母干擾，只拿數字來比較
+                        just_nums = ''.join([c for c in route_str if c.isdigit()])
+                        if just_nums:
+                            val = int(just_nums)
+                            # 如果這個路線「開頭第一位」就是選中的數字（如 0左），列為最高優先度
+                            if route_str.startswith(current_filter):
+                                return (0, val, route_str)
+                            # 如果數字在後面（如 101 的 0 在中間），權重較低排在後面
+                            return (1, val, route_str)
+                        return (2, 999, route_str)
+                    
+                    filtered_routes = sorted(raw_filtered, key=custom_numeric_sort)
+                else:
+                    # 如果是顏色（綠、黃等），直接完美繼承你在 ROUTE_CATEGORIES 裡由小到大的手打順序！
+                    filtered_routes = raw_filtered
+            # ==================================================================
 
-            # 【核心步驟 4】第二層選單：只顯示被篩選過後的公車路線
+            # 【核心步驟 4】第二層選單：只顯示被篩選且完美排序過後的公車路線
             route_choice = st.selectbox(
                 "請選擇公車路線", 
                 filtered_routes,
@@ -267,7 +284,7 @@ if __name__ == '__main__':
                 on_change=reset_search
             )
             
-            # 【核心步驟 5】第三層選單：選起訖站點（保持原本的邏輯）
+            # 【核心步驟 5】第三層選單：選起訖站點（全程式只保留這一段，防範 Duplicate ID）
             if route_choice:
                 all_stops = fetch_route_stops(route_choice, h)
                 if all_stops:
@@ -280,6 +297,7 @@ if __name__ == '__main__':
                     st.warning("無法載入站點資訊")
             else:
                 st.info("請先點選上方按鈕或在選單中選擇路線。")
+
 
 
         # --- 3. 公車時刻顯示區：這裡完全不用改！ ---
