@@ -13,7 +13,7 @@ if "GROQ_API_KEY" in st.secrets:
 else:
     st.error("找不到 GROQ_API_KEY，請檢查 Secrets！")
 
-# --- 2. 預先輸入大台南公車完整路線分類字典 ---
+# --- 2. 預先輸入大台南公車完整路線分類字典（不需聯網，速度最快） ---
 ROUTE_CATEGORIES = {
     "黃線 (新營/後壁/白河/麻豆)": [
         "黃幹線", "黃1", "黃2", "黃3", "黃4", "黃5", "黃6", "黃6-1", "黃7", "黃9", 
@@ -45,7 +45,7 @@ ROUTE_CATEGORIES = {
         "19", "20", "21", "31", "32", "33", "62","70左", "70右", "77", "98", "101", "102", "103", "107", "111", "168", 
         "901", "902", "904", "905"
     ],
-    "高鐵快捷": [
+   "高鐵快捷": [
         "H31"
     ],
     "觀光": [
@@ -79,6 +79,7 @@ class DataProcessor():
             'Accept-Encoding': 'gzip'
         }
 
+# 當使用者選了路線，才去 TDX 抓該路線的「所有站點」清單（有快取 1 小時）
 @st.cache_data(ttl=3600)
 def fetch_route_stops(route_name, headers_dict):
     try:
@@ -100,6 +101,7 @@ def fetch_route_stops(route_name, headers_dict):
         return []
     return []
 
+# 關鍵：當按下按鈕，才會動態抓取公車「即時預估到站時刻」（有快取 30 秒控制頻率）
 @st.cache_data(ttl=30)
 def fetch_bus_data(route_name, headers_dict):
     url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/{route_name}?%24format=JSON"
@@ -112,6 +114,7 @@ def fetch_bus_data(route_name, headers_dict):
         return None
     return None
 
+# 抓取台南即時氣象的函數
 @st.cache_data(ttl=600) 
 def fetch_weather_data(headers_dict):
     weather_url = "https://tdx.transportdata.tw/api/basic/v1/Weather/Observation/Station/City/Tainan?%24format=JSON"
@@ -133,10 +136,6 @@ if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時時刻查詢")
 
-    # 先初始化全域會用到的站點變數，防範後面 active_list 抓不到跳錯
-    start_st = None
-    end_st = None
-
     try:
         # 1. 執行身份驗證
         a = Auth(app_id, app_key)
@@ -148,7 +147,7 @@ if __name__ == '__main__':
         current_weather = "使用者尚未查詢"
         bus_status = "使用者尚未查詢路線"
 
-        # --- 側邊欄設定：快速路線篩選鍵盤與選單 ---
+        # 側邊欄設定
         with st.sidebar:
             st.title("🚌 快速路線篩選")
             
@@ -160,7 +159,7 @@ if __name__ == '__main__':
 
             st.write("請點選顏色或數字進行篩選：")
             
-            # 第一排按鈕：綠、橘、1、2
+            # 第一排按鈕
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             with row1_col1:
                 if st.button("綠", use_container_width=True):
@@ -179,7 +178,7 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "2"
                     reset_search()
 
-            # 第二排按鈕：棕、藍、4、5
+            # 第二排按鈕
             row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
             with row2_col1:
                 if st.button("棕", use_container_width=True):
@@ -198,7 +197,7 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "5"
                     reset_search()
 
-            # 第三排按鈕：紅、黃、7、8
+            # 第三排按鈕
             row3_col1, row3_col2, row3_col3, row3_col4 = st.columns(4)
             with row3_col1:
                 if st.button("紅", use_container_width=True):
@@ -217,7 +216,7 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "8"
                     reset_search()
 
-            # 第四排按鈕：市區、高鐵、觀光、0
+            # 第四排按鈕
             row4_col1, row4_col2, row4_col3, row4_col4 = st.columns(4)
             with row4_col1:
                 if st.button("市區", use_container_width=True):
@@ -278,6 +277,7 @@ if __name__ == '__main__':
                                 return (0, val, route_str)
                             return (1, val, route_str)
                         return (2, 999, route_str)
+                    
                     filtered_routes = sorted(raw_filtered, key=custom_numeric_sort)
                 else:
                     filtered_routes = raw_filtered
@@ -291,6 +291,7 @@ if __name__ == '__main__':
                 on_change=reset_search
             )
             
+            start_st = None
             if route_choice:
                 st.session_state.search_clicked = True
                 all_stops = fetch_route_stops(route_choice, h)
@@ -332,7 +333,7 @@ if __name__ == '__main__':
                             json.dump(all_cache, f, ensure_ascii=False, indent=4)
                         st.success("🎉 全台南站點快取建立成功！已完美離線化。")
 
-        # --- 3. 公車時刻顯示區：全功能垂直即時動態時間軸 ---
+        # --- 3. 公車時刻顯示區 ---
         if route_choice and st.session_state.get("search_clicked", False):
             weather_info = fetch_weather_data(h)
             current_weather = weather_info 
@@ -370,7 +371,6 @@ if __name__ == '__main__':
                 active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
 
                 if active_list:
-                    # 🎨 注入大台南公車專屬高級垂直時間軸 CSS 樣式
                     st.markdown("""
                         <style>
                         .timeline-container { position: relative; padding-left: 35px; margin-left: 15px; border-left: 4px solid #4A90E2; padding-top: 10px; padding-bottom: 10px; }
@@ -389,10 +389,9 @@ if __name__ == '__main__':
                         </style>
                     """, unsafe_allow_html=True)
 
-                    # 💡 【完美拼接】：在記憶體中閉合好完整的完整 HTML 字串，一氣呵成渲染
                     html_buffer = '<div class="timeline-container">'
-                    
                     ai_log_list = []
+                    
                     for item in active_list:
                         s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
                         eta_seconds = item.get("EstimateTime")
@@ -445,8 +444,6 @@ if __name__ == '__main__':
                             })
 
                     html_buffer += "</div>"
-                    
-                    # 🎯 核心修復點：一次性把包裝完美的 HTML 字串餵給前端，消滅所有原始碼外洩
                     st.markdown(html_buffer, unsafe_allow_html=True)
                     
                     target_st_name = start_st if start_st else "未設定"
@@ -455,8 +452,6 @@ if __name__ == '__main__':
                     st.info("暫時無此方向的站點班次資訊。")
             else:
                 st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
-        else:
-            st.info("請先在左側選單選擇公車路線，並點擊開始查詢。")
 
         # --- 4. AI 對話區 ---
         st.divider()
@@ -511,8 +506,3 @@ if __name__ == '__main__':
                     
     except Exception as e:  
         st.error(f"發生系統錯誤 : {e}")
-
-                    
-    except Exception as e:  
-        st.error(f"發生系統錯誤 : {e}")
-
