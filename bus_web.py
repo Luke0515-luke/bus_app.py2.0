@@ -85,11 +85,10 @@ class DataProcessor():
     if st.button("❌ 清除篩選", use_container_width=True): st.session_state.selected_filter = None
 
 # 4. 主程式與資料抓取 (這裡填入你剩下的 fetch_data, AI Chat 等邏輯)
-st.header("🚌 台南公車即時時刻查詢")
+
 # ... (請將你原本的 API 呼叫、路線選擇邏輯、AI 對話區貼在下方)
 
 # --- 主程式區 ---
-st.header("🚌 台南公車即時時刻查詢")
 
 # 這裡放入你原有的 API 抓取邏輯 (auth_url, Auth, DataProcessor 等)
 # ... (建議保留你原有的這部分邏輯，確保驗證通過)
