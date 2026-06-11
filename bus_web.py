@@ -318,18 +318,23 @@ if __name__ == '__main__':
             )
             
             # 【核心步驟 5】第三層選單：起訖站點
+                        # 【核心步驟 5】第三層選單：起訖站點（改為一選路線就自動開啟查詢權限）
             if route_choice:
+                # 🎯 關鍵：一選好路線，不論有沒有按按鈕，右邊全線看板直接放行開啟！
+                st.session_state.search_clicked = True
+                
                 all_stops = fetch_route_stops(route_choice, h)
                 if all_stops:
-                    start_st = st.selectbox("請選擇起始站", all_stops, key="start_select")
+                    # 這裡的起訖站保留，作為使用者如果想看特定等候站或者給 AI 助理參考的依據
+                    start_st = st.selectbox("請選擇你的等候站 (可選)", all_stops, index=0, key="start_select")
                     end_st = st.selectbox("請選擇目的地 (僅作路徑參考)", all_stops, index=len(all_stops)-1, key="end_select")
-                    
-                    if st.button("🔍 開始查詢即時動態", type="primary"):
-                        st.session_state.search_clicked = True
                 else:
                     st.warning(f"⚠️ 無法載入【{route_choice}】的站點資訊。")
+                    start_st = None
             else:
                 st.info("請先點選上方按鈕或在選單中選擇路線。")
+                start_st = None
+
                         # --- 🛠️ 專屬後台：每個月手動更新全台南站點快取按鈕 ---
             st.write("---")
             with st.expander("⚙️ 系統維護工具"):
@@ -371,6 +376,53 @@ if __name__ == '__main__':
         # 只要上面的 route_choice 是對的文字（例如 "黃22"），後面的 URL 拼接就會完全正常
                 # --- 3. 公車時刻顯示區：全功能垂直即時動態時間軸（一次問完、極省 API 版） ---
                             # 🎨 注入大台南公車專屬高級垂直時間軸 CSS 樣式（新增紅色警示燈）
+                            # --- 3. 公車時刻顯示區：全功能垂直即時動態時間軸（往返同步、零亂碼優化版） ---
+        if route_choice and st.session_state.get("search_clicked", False):
+            # 呼叫天氣
+            weather_info = fetch_weather_data(h)
+            current_weather = weather_info 
+            
+            # 🎯 這裡在使用者一進來時，就一次把去回程的所有 ETA 與無障礙狀態打包完成
+            bus_list = fetch_bus_data(route_choice, h)
+            
+            if bus_list is not None:
+                # 同步拆解去程(0)與回程(1)
+                direction_0 = [item for item in bus_list if item.get("Direction") == 0]
+                direction_1 = [item for item in bus_list if item.get("Direction") == 1]
+                
+                # 依照公車官方順序 StopSequence 進行精準排序
+                direction_0 = sorted(direction_0, key=lambda x: x.get('StopSequence', 0))
+                direction_1 = sorted(direction_1, key=lambda x: x.get('StopSequence', 0))
+                
+                # 自動抓取終點站名稱作為順逆向按鈕的標籤
+                dest_0 = direction_0[-1].get("StopName", {}).get("Zh_tw", "去程") if direction_0 else "去程"
+                dest_1 = direction_1[-1].get("StopName", {}).get("Zh_tw", "回程") if direction_1 else "回程"
+
+                st.subheader(f"🚌 {route_choice} 全線即時動態看板")
+                st.caption(f"🌡️ 當前天氣：{weather_info}")
+
+                # 初始化方向狀態
+                if "dir_toggle" not in st.session_state:
+                    st.session_state.dir_toggle = "去程"
+                
+                # 方向與手動更新按鈕列
+                col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1.5, 1])
+                with col_btn1:
+                    if st.button(f"➡️ 往 {dest_0}", use_container_width=True, type="primary" if st.session_state.dir_toggle == "去程" else "secondary"):
+                        st.session_state.dir_toggle = "去程"
+                with col_btn2:
+                    if st.button(f"⬅️ 往 {dest_1}", use_container_width=True, type="primary" if st.session_state.dir_toggle == "回程" else "secondary"):
+                        st.session_state.dir_toggle = "回程"
+                with col_btn3:
+                    if st.button("🔄 重新整理", use_container_width=True):
+                        st.toast("⏳ 正在更新即時站態...", icon="🚌")
+                        st.rerun()
+
+                # 依據選擇的方向直接從記憶體中提取對應的清單，完全不需要再次聯網！
+                active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
+
+                if active_list:
+                    # 🎨 注入大台南公車專屬高級垂直時間軸 CSS 樣式
                     st.markdown("""
                         <style>
                         .timeline-container { position: relative; padding-left: 35px; margin-left: 15px; border-left: 4px solid #4A90E2; padding-top: 10px; padding-bottom: 10px; }
@@ -383,14 +435,13 @@ if __name__ == '__main__':
                         .wheelchair-tag { background-color: #2ECC71; color: white; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; }
                         .time-badge { padding: 6px 12px; border-radius: 20px; color: white; font-weight: bold; font-size: 12px; min-width: 90px; text-align: center; display: inline-block; }
                         .ts-gray { background-color: #BDBDBD; }
-                        .ts-red { background-color: #D32F2F; animation: pulse 0.8s infinite; } /* 新增：紅色緊急進站燈 */
-                        .ts-orange { background-color: #FFA726; } /* 橘色改為靜態，保留給3分鐘內 */
+                        .ts-orange { background-color: #FFA726; animation: pulse 1s infinite; }
                         .ts-green { background-color: #66BB6A; }
-                        @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
+                        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
                         </style>
                     """, unsafe_allow_html=True)
 
-                    # 【終結亂碼核心大招】：在 Python 記憶體中拼接好完整的完整 HTML 字串，再一次性餵給 Streamlit
+                    # 💡 【終結亂碼核心大招】：在 Python 記憶體中拼接好完整的完整 HTML 字串，再一次性餵給 Streamlit
                     html_buffer = '<div class="timeline-container">'
                     
                     ai_log_list = []
@@ -406,22 +457,16 @@ if __name__ == '__main__':
                         # 車型文字解析
                         car_size = "中巴" if v_type == 2 else "大巴"
 
-                        # 🎯 重新調校後的精準時間燈號判定邏輯
+                        # 解析燈號與狀態文字
                         if eta_seconds is None:
                             if stop_status == 1: time_text = "尚未發車"; badge_cls = "ts-gray"
                             elif stop_status == 2: time_text = "交管不停"; badge_cls = "ts-gray"
                             elif stop_status == 3: time_text = "末班車已過"; badge_cls = "ts-gray"
                             else: time_text = "未發車"; badge_cls = "ts-gray"
                         elif eta_seconds <= 120:
-                            # 🔴 2分鐘內（120秒）：即將進站，顯示紅色閃爍燈
                             time_text = "即將進站"
-                            badge_cls = "ts-red"
-                        elif eta_seconds <= 180:
-                            # 🟠 3分鐘內（121秒~180秒）：顯示橘色燈
-                            time_text = f"{eta_seconds // 60} 分鐘"
                             badge_cls = "ts-orange"
                         else:
-                            # 🟢 3分鐘以上：顯示綠色燈
                             time_text = f"{eta_seconds // 60} 分鐘"
                             badge_cls = "ts-green"
 
@@ -448,22 +493,28 @@ if __name__ == '__main__':
                         </div>
                         """
 
-
-                        # 收集當前等候站資料塞給 AI
-                        if s_name == start_st:
+                        # 記錄使用者選定站點狀態備用
+                        if start_st and s_name == start_st:
                             ai_log_list.append({
                                 "當前等候站": s_name, 
                                 "動態": time_text, 
-                                "是否有車在站上": "是" if plate_number else "否",
-                                "車牌": plate_number,
+                                "車牌": plate_number if plate_number else "無",
                                 "是否無障礙": "是" if is_low_floor else "否"
                             })
 
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    bus_status = f"使用者等候路線：{route_choice}（往{st.session_state.dir_toggle}），在 {start_st} 看到的狀態：{json.dumps(ai_log_list, ensure_ascii=False)}"
+                    html_buffer += "</div>"
+                    
+                    # 🎯 這裡只呼叫一次 st.markdown，結構完全閉合，亂碼徹底消失！
+                    st.markdown(html_buffer, unsafe_allow_html=True)
+                    
+                    # 更新全域變數提供給 Groq AI 助理做脈絡理解
+                    target_st_name = start_st if start_st else "未設定"
+                    bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
                 else:
                     st.info("暫時無此方向的站點班次資訊。")
-                
+            else:
+                st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
+
  
 
         # --- 4. AI 對話區（已修正縮排與顯示 Bug） ---
