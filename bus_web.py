@@ -458,14 +458,6 @@ if __name__ == '__main__':
 
                     html_buffer += "</div>"
                     st.components.v1.html(html_buffer, height=600, scrolling=True)
-
-                    target_st_name = start_st if start_st else "未設定"
-
-                         # # 1. 確保有這行！初始化 HTML 字串容器
-                                         html_buffer += "</div>"
-                    st.components.v1.html(html_buffer, height=600, scrolling=True)
-
-                    
                     target_st_name = start_st if start_st else "未設定"
                     bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
                 else:
