@@ -386,9 +386,9 @@ if __name__ == '__main__':
 
                     
                         # ✅ 修正後的正確順序
-                        html_buffer = '<div class="timeline-container">'
-                        ai_log_list = []
-                        for item in active_list:
+                    html_buffer = '<div class="timeline-container">'
+                    ai_log_list = []
+                    for item in active_list:
                         # ... 底下原本的程式碼都不動 ...
 
                         s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
