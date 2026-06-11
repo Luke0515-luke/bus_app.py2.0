@@ -140,37 +140,134 @@ if __name__ == '__main__':
         # 側邊欄設定
         # 側邊欄設定
                 # 側邊欄設定
+                # 側邊欄設定
         with st.sidebar:
-            st.title("查詢設定")
+            st.title("🚌 快速路線篩選")
             
             def reset_search():
                 st.session_state.search_clicked = False
 
-            # --- 1. 第一層選單：選擇公車顏色或分類 ---
-            category_choice = st.selectbox(
-                "請先選擇公車分類",
-                list(ROUTE_CATEGORIES.keys()), # 自動抓出 "黃線"、"綠線" 等大標題
+            # 【核心步驟 1】初始化按鈕的記憶狀態
+            if "selected_filter" not in st.session_state:
+                st.session_state.selected_filter = None  # 一開始沒有選任何按鈕
+
+            # 【核心步驟 2】打造像手機 App 一樣的按鈕鍵盤排版 (4欄位)
+            st.write("請點選顏色或數字進行篩選：")
+            
+            # 第一排按鈕：綠、橘、1、2
+            row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+            with row1_col1:
+                if st.button("綠", use_container_width=True):
+                    st.session_state.selected_filter = "綠"
+                    reset_search()
+            with row1_col2:
+                if st.button("橘", use_container_width=True):
+                    st.session_state.selected_filter = "橘"
+                    reset_search()
+            with row1_col3:
+                if st.button("1", use_container_width=True):
+                    st.session_state.selected_filter = "1"
+                    reset_search()
+            with row1_col4:
+                if st.button("2", use_container_width=True):
+                    st.session_state.selected_filter = "2"
+                    reset_search()
+
+            # 第二排按鈕：棕、藍、4、5
+            row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
+            with row2_col1:
+                if st.button("棕", use_container_width=True):
+                    st.session_state.selected_filter = "棕"
+                    reset_search()
+            with row2_col2:
+                if st.button("藍", use_container_width=True):
+                    st.session_state.selected_filter = "藍"
+                    reset_search()
+            with row2_col3:
+                if st.button("4", use_container_width=True):
+                    st.session_state.selected_filter = "4"
+                    reset_search()
+            with row2_col4:
+                if st.button("5", use_container_width=True):
+                    st.session_state.selected_filter = "5"
+                    reset_search()
+
+            # 第三排按鈕：紅、黃、7、8
+            row3_col1, row3_col2, row3_col3, row3_col4 = st.columns(4)
+            with row3_col1:
+                if st.button("紅", use_container_width=True):
+                    st.session_state.selected_filter = "紅"
+                    reset_search()
+            with row3_col2:
+                if st.button("黃", use_container_width=True):
+                    st.session_state.selected_filter = "黃"
+                    reset_search()
+            with row3_col3:
+                if st.button("7", use_container_width=True):
+                    st.session_state.selected_filter = "7"
+                    reset_search()
+            with row3_col4:
+                if st.button("8", use_container_width=True):
+                    st.session_state.selected_filter = "8"
+                    reset_search()
+
+            # 第四排按鈕：市區、H(高鐵)、0、清除
+            row4_col1, row4_col2, row4_col3, row4_col4 = st.columns(4)
+            with row4_col1:
+                if st.button("市區", use_container_width=True):
+                    st.session_state.selected_filter = "市區"
+                    reset_search()
+            with row4_col2:
+                if st.button("高鐵", use_container_width=True):
+                    st.session_state.selected_filter = "H"
+                    reset_search()
+            with row4_col3:
+                if st.button("0", use_container_width=True):
+                    st.session_state.selected_filter = "0"
+                    reset_search()
+            with row4_col4:
+                if st.button("❌", use_container_width=True):
+                    st.session_state.selected_filter = None  # 清除篩選
+                    reset_search()
+
+            # 顯示目前篩選狀態
+            current_filter = st.session_state.selected_filter
+            if current_filter:
+                st.success(f"目前已選擇篩選：【{current_filter}】")
+            else:
+                st.info("目前顯示：全部路線")
+
+            # 【核心步驟 3】根據點擊的按鈕，動態過濾出「符合條件」的公車支線清單
+            filtered_routes = []
+            
+            # 撈出我們在頂部 ROUTE_CATEGORIES 定義的所有公車代號
+            all_possible_routes = []
+            for routes_list in ROUTE_CATEGORIES.values():
+                all_possible_routes.extend(routes_list)
+            # 去除重複值並排序
+            all_possible_routes = sorted(list(set(all_possible_routes)))
+
+            # 開始進行過濾邏輯
+            if current_filter is None:
+                filtered_routes = all_possible_routes
+            elif current_filter == "市區":
+                # 撈出純數字或是包含左右環狀線的市區公車
+                filtered_routes = ROUTE_CATEGORIES["市區數字公車 (台南市區)"]
+            else:
+                # 如果選了「黃」，就撈出名稱有「黃」的公車；選了「2」，就撈出名稱有「2」的公車
+                filtered_routes = [r for r in all_possible_routes if current_filter in r]
+
+            # 【核心步驟 4】第二層選單：只顯示被篩選過後的公車路線
+            route_choice = st.selectbox(
+                "請選擇公車路線", 
+                filtered_routes,
                 index=None,
-                placeholder="請選擇顏色或分類...",
+                placeholder="請選擇或輸入路線...",
+                key="bus_route_select",
                 on_change=reset_search
             )
-
-            # --- 2. 第二層選單：根據第一層的選擇，直接從字典撈出對應支線 ---
-            route_choice = None
-            if category_choice:  
-                route_choice = st.selectbox(
-                    "請選擇具體路線", 
-                    ROUTE_CATEGORIES[category_choice], # 直接連動對應的清單
-                    index=None,
-                    placeholder="請選擇支線名稱...",
-                    key="bus_route_select",
-                    on_change=reset_search
-                )
-           
-
             
-
-            # --- 3. 第三層選單：選擇起訖站點（保持原本的邏輯） ---
+            # 【核心步驟 5】第三層選單：選起訖站點（保持原本的邏輯）
             if route_choice:
                 all_stops = fetch_route_stops(route_choice, h)
                 if all_stops:
@@ -182,10 +279,8 @@ if __name__ == '__main__':
                 else:
                     st.warning("無法載入站點資訊")
             else:
-                if category_choice:
-                    st.info("請接著選擇具體的公車支線。")
-                else:
-                    st.info("請先在上方選擇公車分類。")
+                st.info("請先點選上方按鈕或在選單中選擇路線。")
+
 
         # --- 3. 公車時刻顯示區：這裡完全不用改！ ---
         # 只要上面的 route_choice 是對的文字（例如 "黃22"），後面的 URL 拼接就會完全正常
