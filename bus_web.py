@@ -13,9 +13,7 @@ if "GROQ_API_KEY" in st.secrets:
 else:
     st.error("找不到 GROQ_API_KEY，請檢查 Secrets！")
 
-# --- 2. 預先輸入台南常用公車路線（完全不聯網，速度最快） ---
-# --- 2. 預先輸入台南常用公車路線（分類字典格式） ---
-# --- 2. 預先輸入大台南公車完整路線分類字典（不需聯網，速度最快） ---
+# --- 2. 預先輸入大台南公車完整路線分類字典 ---
 ROUTE_CATEGORIES = {
     "黃線 (新營/後壁/白河/麻豆)": [
         "黃幹線", "黃1", "黃2", "黃3", "黃4", "黃5", "黃6", "黃6-1", "黃7", "黃9", 
@@ -42,13 +40,12 @@ ROUTE_CATEGORIES = {
         "紅幹線", "紅1", "紅2", "紅3", "紅4", "紅10", "紅11", "紅12", 
         "紅13", "紅14"
     ],
-   
     "市區數字公車 (台南市區)": [
         "0左", "0右", "6", "7", "9", "10", "11", "14", "15", "18", 
         "19", "20", "21", "31", "32", "33", "62","70左", "70右", "77", "98", "101", "102", "103", "107", "111", "168", 
         "901", "902", "904", "905"
     ],
-   "高鐵快捷": [
+    "高鐵快捷": [
         "H31"
     ],
     "觀光": [
@@ -82,21 +79,16 @@ class DataProcessor():
             'Accept-Encoding': 'gzip'
         }
 
-# 當使用者選了路線，才去 TDX 抓該路線的「所有站點」清單（有快取 1 小時）
 @st.cache_data(ttl=3600)
-# --- 🛠️ 離線站點快取讀取機制（極省 API 用量關鍵） ---
 def fetch_route_stops(route_name, headers_dict):
-    # 1. 嘗試讀取本機的靜態站點快取 JSON
     try:
         with open("tainan_stops_cache.json", "r", encoding="utf-8") as f:
             local_cache = json.load(f)
             if route_name in local_cache and local_cache[route_name]:
                 return local_cache[route_name]
     except FileNotFoundError:
-        # 如果還沒產生 json 檔，就放行讓它去抓 API，確保程式不當機
         pass
 
-    # 2. 如果本機快取找不到，才勉為其難去抓 TDX API
     stops_url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/Tainan/{route_name}?%24format=JSON"
     try:
         res = requests.get(stops_url, headers=headers_dict)
@@ -108,12 +100,8 @@ def fetch_route_stops(route_name, headers_dict):
         return []
     return []
 
-
-# 關鍵：當按下按鈕，才會動態抓取公車「即時預估到站時刻」（有快取 30 秒控制頻率）
 @st.cache_data(ttl=30)
-# --- 🛠️ 終極精簡聯網：一次把時間、車牌、無障礙全部抓完 ---
 def fetch_bus_data(route_name, headers_dict):
-    # 這個網址其實就包含了：到站時間、當前停靠車牌、以及車輛類型(無障礙)
     url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/{route_name}?%24format=JSON"
     try:
         res = requests.get(url, headers=headers_dict)
@@ -124,8 +112,6 @@ def fetch_bus_data(route_name, headers_dict):
         return None
     return None
 
-
-# 抓取台南即時氣象的函數
 @st.cache_data(ttl=600) 
 def fetch_weather_data(headers_dict):
     weather_url = "https://tdx.transportdata.tw/api/basic/v1/Weather/Observation/Station/City/Tainan?%24format=JSON"
@@ -143,12 +129,13 @@ def fetch_weather_data(headers_dict):
     return "尚無氣象資料"
 
 # --- 程式執行主體 ---
-# --- 程式執行主體 ---
-# --- 程式執行主體 ---
-# --- 程式執行主體 ---
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時時刻查詢")
+
+    # 先初始化全域會用到的站點變數，防範後面 active_list 抓不到跳錯
+    start_st = None
+    end_st = None
 
     try:
         # 1. 執行身份驗證
@@ -161,10 +148,7 @@ if __name__ == '__main__':
         current_weather = "使用者尚未查詢"
         bus_status = "使用者尚未查詢路線"
 
-        # 側邊欄設定
-        # 側邊欄設定
-                # 側邊欄設定
-                # --- 側邊欄設定：快速路線篩選鍵盤與選單（已修正高鐵、觀光按鈕衝突問題） ---
+        # --- 側邊欄設定：快速路線篩選鍵盤與選單 ---
         with st.sidebar:
             st.title("🚌 快速路線篩選")
             
@@ -233,7 +217,7 @@ if __name__ == '__main__':
                     st.session_state.selected_filter = "8"
                     reset_search()
 
-            # 第四排按鈕：市區、高鐵、觀光、0 (完全拆分)
+            # 第四排按鈕：市區、高鐵、觀光、0
             row4_col1, row4_col2, row4_col3, row4_col4 = st.columns(4)
             with row4_col1:
                 if st.button("市區", use_container_width=True):
@@ -253,12 +237,10 @@ if __name__ == '__main__':
                     reset_search()
 
             st.write("") 
-            # 獨立的清除篩選按鈕
             if st.button("❌ 清除篩選條件", use_container_width=True):
                 st.session_state.selected_filter = None
                 reset_search()
 
-            # 顯示目前篩選狀態提示
             current_filter = st.session_state.selected_filter
             if current_filter == "高鐵":
                 st.success("目前已選擇篩選：【高鐵快捷公車】")
@@ -269,30 +251,24 @@ if __name__ == '__main__':
             else:
                 st.info("目前顯示：全部路線")
 
-            # --- 🛠️ 篩選與排序優化核心邏輯 ---
             all_possible_routes = []
             for routes_list in ROUTE_CATEGORIES.values():
                 all_possible_routes.extend(routes_list)
             
-            # 依據 ROUTE_CATEGORIES 定義的順序去重
             seen = set()
             all_possible_routes = [x for x in all_possible_routes if not (x in seen or seen.add(x))]
 
-            # 開始過濾選單內容
             if current_filter is None:
                 filtered_routes = all_possible_routes
             elif current_filter == "市區":
                 filtered_routes = ROUTE_CATEGORIES["市區數字公車 (台南市區)"]
             elif current_filter == "高鐵":
-                # 💡 精準對應：直接去抓你開頭寫的 "高鐵快捷" 路線清單
                 filtered_routes = ROUTE_CATEGORIES["高鐵快捷"]
             elif current_filter == "觀光":
-                # 💡 精準對應：直接去抓你開頭寫的 "觀光" 路線清單
                 filtered_routes = ROUTE_CATEGORIES["觀光"]
             else:
                 raw_filtered = [r for r in all_possible_routes if current_filter in r]
                 
-                # 數字「0」的智慧高亮置頂排序
                 if current_filter.isdigit():
                     def custom_numeric_sort(route_str):
                         just_nums = ''.join([c for c in route_str if c.isdigit()])
@@ -302,12 +278,10 @@ if __name__ == '__main__':
                                 return (0, val, route_str)
                             return (1, val, route_str)
                         return (2, 999, route_str)
-                    
                     filtered_routes = sorted(raw_filtered, key=custom_numeric_sort)
                 else:
                     filtered_routes = raw_filtered
 
-            # 【核心步驟 4】第二層選單：只顯示篩選過且完美排序的公車路線
             route_choice = st.selectbox(
                 "請選擇公車路線", 
                 filtered_routes,
@@ -317,25 +291,17 @@ if __name__ == '__main__':
                 on_change=reset_search
             )
             
-            # 【核心步驟 5】第三層選單：起訖站點
-                        # 【核心步驟 5】第三層選單：起訖站點（改為一選路線就自動開啟查詢權限）
             if route_choice:
-                # 🎯 關鍵：一選好路線，不論有沒有按按鈕，右邊全線看板直接放行開啟！
                 st.session_state.search_clicked = True
-                
                 all_stops = fetch_route_stops(route_choice, h)
                 if all_stops:
-                    # 這裡的起訖站保留，作為使用者如果想看特定等候站或者給 AI 助理參考的依據
                     start_st = st.selectbox("請選擇你的等候站 (可選)", all_stops, index=0, key="start_select")
                     end_st = st.selectbox("請選擇目的地 (僅作路徑參考)", all_stops, index=len(all_stops)-1, key="end_select")
                 else:
                     st.warning(f"⚠️ 無法載入【{route_choice}】的站點資訊。")
-                    start_st = None
             else:
                 st.info("請先點選上方按鈕或在選單中選擇路線。")
-                start_st = None
 
-                        # --- 🛠️ 專屬後台：每個月手動更新全台南站點快取按鈕 ---
             st.write("---")
             with st.expander("⚙️ 系統維護工具"):
                 st.caption("每個月或台南公車大改點時，點擊下方按鈕一次即可。")
@@ -344,11 +310,9 @@ if __name__ == '__main__':
                         all_cache = {}
                         progress_bar = st.progress(0)
                         
-                        # 攤平所有要抓取的路線
                         all_routes_to_fetch = []
                         for r_list in ROUTE_CATEGORIES.values():
                             all_routes_to_fetch.extend(r_list)
-                        # 去重
                         all_routes_to_fetch = list(set(all_routes_to_fetch))
                         total_routes = len(all_routes_to_fetch)
 
@@ -362,50 +326,35 @@ if __name__ == '__main__':
                                         all_cache[r_name] = [s['StopName']['Zh_tw'] for s in d_json[0]['Stops']]
                             except:
                                 all_cache[r_name] = []
-                            # 更新進度條
                             progress_bar.progress((idx + 1) / total_routes)
                         
-                        # 寫入本機 JSON 檔案
                         with open("tainan_stops_cache.json", "w", encoding="utf-8") as f:
                             json.dump(all_cache, f, ensure_ascii=False, indent=4)
                         st.success("🎉 全台南站點快取建立成功！已完美離線化。")
 
-
-
-        # --- 3. 公車時刻顯示區：這裡完全不用改！ ---
-        # 只要上面的 route_choice 是對的文字（例如 "黃22"），後面的 URL 拼接就會完全正常
-                # --- 3. 公車時刻顯示區：全功能垂直即時動態時間軸（一次問完、極省 API 版） ---
-                            # 🎨 注入大台南公車專屬高級垂直時間軸 CSS 樣式（新增紅色警示燈）
-                            # --- 3. 公車時刻顯示區：全功能垂直即時動態時間軸（往返同步、零亂碼優化版） ---
+        # --- 3. 公車時刻顯示區：全功能垂直即時動態時間軸 ---
         if route_choice and st.session_state.get("search_clicked", False):
-            # 呼叫天氣
             weather_info = fetch_weather_data(h)
             current_weather = weather_info 
             
-            # 🎯 這裡在使用者一進來時，就一次把去回程的所有 ETA 與無障礙狀態打包完成
             bus_list = fetch_bus_data(route_choice, h)
             
             if bus_list is not None:
-                # 同步拆解去程(0)與回程(1)
                 direction_0 = [item for item in bus_list if item.get("Direction") == 0]
                 direction_1 = [item for item in bus_list if item.get("Direction") == 1]
                 
-                # 依照公車官方順序 StopSequence 進行精準排序
                 direction_0 = sorted(direction_0, key=lambda x: x.get('StopSequence', 0))
                 direction_1 = sorted(direction_1, key=lambda x: x.get('StopSequence', 0))
                 
-                # 自動抓取終點站名稱作為順逆向按鈕的標籤
                 dest_0 = direction_0[-1].get("StopName", {}).get("Zh_tw", "去程") if direction_0 else "去程"
                 dest_1 = direction_1[-1].get("StopName", {}).get("Zh_tw", "回程") if direction_1 else "回程"
 
                 st.subheader(f"🚌 {route_choice} 全線即時動態看板")
                 st.caption(f"🌡️ 當前天氣：{weather_info}")
 
-                # 初始化方向狀態
                 if "dir_toggle" not in st.session_state:
                     st.session_state.dir_toggle = "去程"
                 
-                # 方向與手動更新按鈕列
                 col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1.5, 1])
                 with col_btn1:
                     if st.button(f"➡️ 往 {dest_0}", use_container_width=True, type="primary" if st.session_state.dir_toggle == "去程" else "secondary"):
@@ -418,7 +367,6 @@ if __name__ == '__main__':
                         st.toast("⏳ 正在更新即時站態...", icon="🚌")
                         st.rerun()
 
-                # 依據選擇的方向直接從記憶體中提取對應的清單，完全不需要再次聯網！
                 active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
 
                 if active_list:
@@ -441,7 +389,7 @@ if __name__ == '__main__':
                         </style>
                     """, unsafe_allow_html=True)
 
-                    # 💡 【終結亂碼核心大招】：在 Python 記憶體中拼接好完整的完整 HTML 字串，再一次性餵給 Streamlit
+                    # 💡 【完美拼接】：在記憶體中閉合好完整的完整 HTML 字串，一氣呵成渲染
                     html_buffer = '<div class="timeline-container">'
                     
                     ai_log_list = []
@@ -453,11 +401,8 @@ if __name__ == '__main__':
                         
                         v_type = item.get("VehicleType")
                         is_low_floor = (v_type in [3, 4]) or (item.get("IsLowFloor") == True)
-                        
-                        # 車型文字解析
                         car_size = "中巴" if v_type == 2 else "大巴"
 
-                        # 解析燈號與狀態文字
                         if eta_seconds is None:
                             if stop_status == 1: time_text = "尚未發車"; badge_cls = "ts-gray"
                             elif stop_status == 2: time_text = "交管不停"; badge_cls = "ts-gray"
@@ -470,7 +415,6 @@ if __name__ == '__main__':
                             time_text = f"{eta_seconds // 60} 分鐘"
                             badge_cls = "ts-green"
 
-                        # 車牌、車型、無障礙複合標籤
                         bus_html = ""
                         if plate_number and plate_number != "🧱" and plate_number != "無車牌":
                             wheelchair_text = "♿ 低底盤" if is_low_floor else "一般車"
@@ -479,7 +423,6 @@ if __name__ == '__main__':
                             <span class="wheelchair-tag">{wheelchair_text}</span>
                             """
 
-                        # 把這一站的元件追加進大字串包中
                         html_buffer += f"""
                         <div class="timeline-item">
                             <div class="timeline-circle"></div>
@@ -493,7 +436,6 @@ if __name__ == '__main__':
                         </div>
                         """
 
-                        # 記錄使用者選定站點狀態備用
                         if start_st and s_name == start_st:
                             ai_log_list.append({
                                 "當前等候站": s_name, 
@@ -504,30 +446,25 @@ if __name__ == '__main__':
 
                     html_buffer += "</div>"
                     
-                    # 🎯 這裡只呼叫一次 st.markdown，結構完全閉合，亂碼徹底消失！
+                    # 🎯 核心修復點：一次性把包裝完美的 HTML 字串餵給前端，消滅所有原始碼外洩
                     st.markdown(html_buffer, unsafe_allow_html=True)
                     
-                    # 更新全域變數提供給 Groq AI 助理做脈絡理解
                     target_st_name = start_st if start_st else "未設定"
                     bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
                 else:
                     st.info("暫時無此方向的站點班次資訊。")
             else:
                 st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
+        else:
+            st.info("請先在左側選單選擇公車路線，並點擊開始查詢。")
 
- 
-
-        # --- 4. AI 對話區（已修正縮排與顯示 Bug） ---
-                # --- 3. AI 對話區 ---
-                # --- 3. AI 對話區 ---
+        # --- 4. AI 對話區 ---
         st.divider()
         st.subheader("🤖 問問 AI 助理")
 
-        # 【步驟 1】初始化對話紀錄
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
 
-        # 【步驟 2】在網頁畫面上重繪過去的對話（前端顯示）
         for message in st.session_state.chat_history:
             if message["role"] == "user":
                 with st.chat_message("user"):
@@ -536,47 +473,36 @@ if __name__ == '__main__':
                 with st.chat_message("assistant"):
                     st.write(message["content"])
 
-        # 【步驟 3】接收使用者新輸入
         user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
         
         if user_question:
-            # 立即在畫面上秀出使用者的最新問題
             with st.chat_message("user"):
                 st.write(user_question)
 
             with st.spinner("AI 正在思考中..."):
                 try:  
-                    # 這是當前最新的環境變數與問題
                     prompt_content = f"【目前天氣】: {current_weather}\n【公車狀態】: {bus_status}"
                     current_user_payload = f"{prompt_content}\n使用者問題 : {user_question}"
                     
-                    # 🧠 【靈魂步驟：建構給 Groq 的記憶包】
-                    # 首先放最基本的人設
                     groq_messages = [
                         {"role": "system", "content": "你是一位專業、友善的台南公車導遊。請根據當前的天氣、公車狀態以及使用者之前的對話脈絡，給予貼心流暢的中文回答。"}
                     ]
                     
-                    # 接著，把過去聊過的所有歷史紀錄「依序」塞進去給 Groq 看
                     for hist in st.session_state.chat_history:
                         groq_messages.append({"role": hist["role"], "content": hist["content"]})
                     
-                    # 最後，把「當前的天氣動態 + 使用者最新問的問題」當作最後一發子彈塞進去
                     groq_messages.append({"role": "user", "content": current_user_payload})
                 
-                    # 傳送包含「完整記憶歷史」的封包給 Groq
                     chat_completion = client.chat.completions.create(
-                        messages=groq_messages, # <-- 換成我們精心打包好的記憶矩陣！
+                        messages=groq_messages,
                         model="llama-3.3-70b-versatile"
                     )
                 
                     ai_text = chat_completion.choices[0].message.content
                     
-                    # 在畫面上秀出 AI 的回答
                     with st.chat_message("assistant"):
                         st.write(ai_text)
                     
-                    # 💾 【最後關鍵：把這次的對話存入 session_state 記憶庫】
-                    # 注意：我們存進記憶庫時，使用者這邊「存單純的問題」就好，不要把落落長的天氣公車背景資料存進歷史，這樣下次對話歷史才乾淨。
                     st.session_state.chat_history.append({"role": "user", "content": user_question})
                     st.session_state.chat_history.append({"role": "assistant", "content": ai_text})
 
