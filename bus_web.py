@@ -448,16 +448,19 @@ if __name__ == '__main__':
                         </div>
                         """
 
-                        if start_st and s_name == start_st:
-                            ai_log_list.append({
-                                "當前等候站": s_name, 
-                                "動態": time_text, 
-                                "車牌": plate_number if plate_number else "無",
-                                "是否無障礙": "是" if is_low_floor else "否"
-                            })
+                    if start_st and s_name == start_st:
+                        ai_log_list.append({
+                            "當前等候站": s_name, 
+                            "動態": time_text, 
+                            "車牌": plate_number if plate_number else "無",
+                            "是否無障礙": "是" if is_low_floor else "否"
+                        })
 
-               html_buffer += "</div>"
-                  st.components.v1.html(html_buffer, height=600, scrolling=True)
+                    html_buffer += "</div>"
+                    st.components.v1.html(html_buffer, height=600, scrolling=True)
+
+                    target_st_name = start_st if start_st else "未設定"
+
                          # # 1. 確保有這行！初始化 HTML 字串容器
                                          html_buffer += "</div>"
                     st.components.v1.html(html_buffer, height=600, scrolling=True)
