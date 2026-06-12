@@ -291,14 +291,35 @@ if __name__ == '__main__':
                     with st.spinner("正在將全台南公車站點離線化，請稍候..."):
                         all_cache = {}
                         progress_bar = st.progress(0)
-            
-            # --- 確保這裡直接接下面抓資料的邏輯，不要有 html_buffer 或 item！ ---
-            
+                        
+                        # 1. 整理出所有需要抓取的路線
                         all_routes_to_fetch = []
                         for r_list in ROUTE_CATEGORIES.values():
                             all_routes_to_fetch.extend(r_list)
                         all_routes_to_fetch = list(set(all_routes_to_fetch))
                         total_routes = len(all_routes_to_fetch)
+                        
+                        # 2. 迴圈抓取每條路線的站點
+                        for idx, r_name in enumerate(all_routes_to_fetch):
+                            stops_url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/Tainan/{r_name}?%24format=JSON"
+                            try:
+                                # 注意：這裡的 h 是前面驗證拿到的 headers
+                                res = requests.get(stops_url, headers=h)
+                                if res.status_code == 200:
+                                    data = res.json()
+                                    if data:
+                                        all_cache[r_name] = [s['StopName']['Zh_tw'] for s in data[0]['Stops']]
+                            except Exception as e:
+                                pass # 如果某條路線抓失敗就先略過，不讓程式崩潰
+                            
+                            # 更新進度條
+                            progress_bar.progress((idx + 1) / total_routes)
+                        
+                        # 3. 存入本地 JSON 檔案
+                        with open("tainan_stops_cache.json", "w", encoding="utf-8") as f:
+                            json.dump(all_cache, f, ensure_ascii=False, indent=4)
+                        
+                        st.success("✅ 全台南公車站點資料已成功更新並離線儲存！")
             
             # (下面接續原本的 for idx, r_name in enumerate(all_routes_to_fetch): 邏輯)
                         
