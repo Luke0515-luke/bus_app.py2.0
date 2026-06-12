@@ -295,7 +295,8 @@ if __name__ == '__main__':
                                             # 1. 確保有這行！初始化 HTML 字串容器
                     
                     
-                    
+                    for r_list in ROUTE_CATEGORIES.values():
+                        s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
                     
 
                     
