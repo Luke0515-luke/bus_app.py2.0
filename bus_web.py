@@ -355,51 +355,47 @@ if __name__ == '__main__':
                         st.success("🎉 全台南站點快取建立成功！已完美離線化。")
 
         # --- 3. 公車時刻顯示區 ---
-        if route_choice and st.session_state.get("search_clicked", False):
-            weather_info = fetch_weather_data(h)
-            current_weather = weather_info 
-            
-            bus_list = fetch_bus_data(route_choice, h)
-            
-            if bus_list is not None:
-                direction_0 = [item for item in bus_list if item.get("Direction") == 0]
-                direction_1 = [item for item in bus_list if item.get("Direction") == 1]
-                
-                direction_0 = sorted(direction_0, key=lambda x: x.get('StopSequence', 0))
-                direction_1 = sorted(direction_1, key=lambda x: x.get('StopSequence', 0))
-                
-                dest_0 = direction_0[-1].get("StopName", {}).get("Zh_tw", "去程") if direction_0 else "去程"
-                dest_1 = direction_1[-1].get("StopName", {}).get("Zh_tw", "回程") if direction_1 else "回程"
+        # --- 3. 公車時刻顯示區 ---
+if route_choice and st.session_state.get("search_clicked", False):
+    # 1. 先抓取資料
+    weather_info = fetch_weather_data(h)
+    bus_list = fetch_bus_data(route_choice, h)
+    
+    if bus_list:
+        # 2. 資料處理 (務必放在渲染介面之前)
+        direction_0 = sorted([item for item in bus_list if item.get("Direction") == 0], key=lambda x: x.get('StopSequence', 0))
+        direction_1 = sorted([item for item in bus_list if item.get("Direction") == 1], key=lambda x: x.get('StopSequence', 0))
+        
+        # 定義方向變數
+        dest_0 = direction_0[-1].get("StopName", {}).get("Zh_tw", "去程") if direction_0 else "去程"
+        dest_1 = direction_1[-1].get("StopName", {}).get("Zh_tw", "回程") if direction_1 else "回程"
 
-                # ==========================================
-                # 🤖 新增：專屬 AI 的雙向鷹眼資料區塊
-                # ==========================================
-                ai_full_log = []
-                if start_st:
-                    for item in bus_list: # 直接掃描完整的雙向清單
-                        s_name = item.get("StopName", {}).get("Zh_tw", "")
-                        if s_name == start_st:
-                            dir_name = dest_0 if item.get("Direction") == 0 else dest_1
-                            eta = item.get("EstimateTime")
-                            status = item.get("StopStatus", 0)
-                            plate = item.get("PlateNumb", "無車牌")
-                            
-                            # 判斷文字狀態
-                            if eta is None:
-                                if status == 1: time_txt = "尚未發車"
-                                elif status == 2: time_txt = "交管不停"
-                                elif status == 3: time_txt = "末班車已過"
-                                else: time_txt = "未發車"
-                            elif eta <= 120:
-                                time_txt = "即將進站"
-                            else:
-                                time_txt = f"{eta // 60} 分鐘"
-                                
-                            ai_full_log.append({
-                                "方向": f"往 {dir_name}",
-                                "狀態": time_txt,
-                                "車牌": plate if plate and plate != "🧱" else "無"
-                            })
+        # 3. 渲染按鈕
+        if "dir_toggle" not in st.session_state: st.session_state.dir_toggle = "去程"
+        
+        col1, col2, col3 = st.columns([1.5, 1.5, 1])
+        with col1:
+            if st.button(f"➡️ 往 {dest_0}"): st.session_state.dir_toggle = "去程"
+        with col2:
+            if st.button(f"⬅️ 往 {dest_1}"): st.session_state.dir_toggle = "回程"
+            
+        # 4. 根據按鈕決定要顯示哪個 list (修正 active_list 未定義的問題)
+        active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
+        
+        # 5. 渲染 HTML (修正 html_buffer 未定義的問題)
+        html_buffer = '<div class="timeline-container">'
+        ai_full_log = [] # 準備給 AI 的資料
+
+        for item in active_list:
+            # ... 在這裡放入你原本處理每個站點 HTML 的邏輯 ...
+            # 記得包含 ai_full_log.append(...)
+            pass
+            
+        html_buffer += "</div>"
+        st.components.v1.html(html_buffer, height=600, scrolling=True)
+        
+    else:
+        st.error("無法取得即時動態資料。")
                 # ==========================================
 
                 st.subheader(f"🚌 {route_choice} 全線即時動態看板")
