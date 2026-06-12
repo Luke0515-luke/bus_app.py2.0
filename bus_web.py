@@ -286,11 +286,22 @@ if __name__ == '__main__':
 
             st.write("---")
             with st.expander("⚙️ 系統維護工具"):
-                st.caption("每個月或台南公車大改點時，點擊下方按鈕一次即可。")
-                if st.button("🔄 預載並更新全台南站點資料 (一個月點一次)", use_container_width=True):
-                    with st.spinner("正在將全台南公車站點離線化，請稍候..."):
-                        all_cache = {}
-                        progress_bar = st.progress(0)
+    st.caption("(每個月或台南公車大改點時，點擊下方按鈕一次即可：)")
+    if st.button("預載並更新全台南站點資料（一個月點一次）", use_container_width=True):
+        with st.spinner("正在將全台南公車站點離線化，請稍候..."):
+            all_cache = {}
+            progress_bar = st.progress(0)
+            
+            # --- 確保這裡直接接下面抓資料的邏輯，不要有 html_buffer 或 item！ ---
+            
+            all_routes_to_fetch = []
+            for r_list in ROUTE_CATEGORIES.values():
+                all_routes_to_fetch.extend(r_list)
+            
+            all_routes_to_fetch = list(set(all_routes_to_fetch))
+            total_routes = len(all_routes_to_fetch)
+            
+            # (下面接續原本的 for idx, r_name in enumerate(all_routes_to_fetch): 邏輯)
                         
                                             # 1. 確保有這行！初始化 HTML 字串容器
                     
