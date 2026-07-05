@@ -1,76 +1,71 @@
 import json
 import streamlit as st
 import requests
-import pandas as pd
 from groq import Groq
 
 # 1. 讀取 Secrets
-app_id = st.secrets["CLIENT_ID"] 
-app_key = st.secrets["CLIENT_SECRET"] 
+app_id = st.secrets["CLIENT_ID"]
+app_key = st.secrets["CLIENT_SECRET"]
 
-if "GROQ_API_KEY" in st.secrets: 
-    client = Groq(api_key=st.secrets["GROQ_API_KEY"]) 
+if "GROQ_API_KEY" in st.secrets:
+    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 else:
     st.error("找不到 GROQ_API_KEY，請檢查 Secrets！")
 
-# --- 2. 預先輸入大台南公車完整路線分類字典（不需聯網，速度最快） ---
 ROUTE_CATEGORIES = {
     "黃線 (新營/後壁/白河/麻豆)": [
-        "黃幹線", "黃1", "黃2", "黃3", "黃4", "黃5", "黃6", "黃6-1", "黃7", "黃9", 
-        "黃10", "黃11", "黃11-1", "黃12", "黃13", "黃14", "黃14-1", "黃15", "黃16", 
+        "黃幹線", "黃1", "黃2", "黃3", "黃4", "黃5", "黃6", "黃6-1", "黃7", "黃9",
+        "黃10", "黃11", "黃11-1", "黃12", "黃13", "黃14", "黃14-1", "黃15", "黃16",
         "黃20", "黃22", "黃23", "黃24", "黃25"
     ],
     "棕線 (新營/鹽水/學甲/佳里)": [
         "棕幹線", "棕1", "棕2", "棕3", "棕3-1", "棕4", "棕5", "棕6", "棕20", "棕10", "棕11"
     ],
     "綠線 (玉井/新化/左鎮/楠西)": [
-        "綠幹線", "綠1", "綠2","綠2-1", "綠3", "綠4", "綠5", "綠6", "綠7", "綠10", "綠11", 
-        "綠12","綠12-1","綠12-2", "綠13", "綠14", "綠15", "綠16", "綠17", "綠20","綠20-1", "綠21", "綠22", 
-        "綠23", "綠24", "綠25", "綠26", "綠27", "綠28", "綠29", "綠30","綠30-1", "綠31", "綠32"
+        "綠幹線", "綠1", "綠2", "綠2-1", "綠3", "綠4", "綠5", "綠6", "綠7", "綠10", "綠11",
+        "綠12", "綠12-1", "綠12-2", "綠13", "綠14", "綠15", "綠16", "綠17", "綠20", "綠20-1",
+        "綠21", "綠22", "綠23", "綠24", "綠25", "綠26", "綠27", "綠28", "綠29", "綠30",
+        "綠30-1", "綠31", "綠32"
     ],
     "橘線 (佳里/麻豆/玉井/大內)": [
-        "橘幹線", "橘1", "橘2", "橘3", "橘4", "橘4-1", "橘5", "橘6", "橘9", "橘9-1", 
+        "橘幹線", "橘1", "橘2", "橘3", "橘4", "橘4-1", "橘5", "橘6", "橘9", "橘9-1",
         "橘10", "橘10-1", "橘11", "橘11-1", "橘12", "橘13", "橘14", "橘20"
     ],
     "藍線 (安平/佳里/將軍/北門)": [
-        "藍幹線", "藍1", "藍2", "藍3", "藍4", "藍10", "藍11", "藍13","藍14", "藍15", 
+        "藍幹線", "藍1", "藍2", "藍3", "藍4", "藍10", "藍11", "藍13", "藍14", "藍15",
         "藍20", "藍21", "藍22", "藍23", "藍24", "藍25", "藍26", "藍27", "藍28", "藍29", "藍30"
     ],
     "紅線 (台南/關廟/龍崎/高鐵)": [
-        "紅幹線", "紅1", "紅2", "紅3", "紅4", "紅10", "紅11", "紅12", 
-        "紅13", "紅14"
+        "紅幹線", "紅1", "紅2", "紅3", "紅4", "紅10", "紅11", "紅12", "紅13", "紅14"
     ],
     "市區數字公車 (台南市區)": [
-        "0左", "0右", "6", "7", "9", "10", "11", "14", "15", "18", 
-        "19", "20", "21", "31", "32", "33", "62","70左", "70右", "77", "98", "101", "102", "103", "107", "111", "168", 
-        "901", "902", "904", "905"
+        "0左", "0右", "6", "7", "9", "10", "11", "14", "15", "18",
+        "19", "20", "21", "31", "32", "33", "62", "70左", "70右", "77", "98",
+        "101", "102", "103", "107", "111", "168", "901", "902", "904", "905"
     ],
-   "高鐵快捷": [
-        "H31"
-    ],
-    "觀光": [
-        "東山咖啡線", "梅嶺線", "菱波官田線", "雙層巴士"
-    ]
+    "高鐵快捷": ["H31"],
+    "觀光": ["東山咖啡線", "梅嶺線", "菱波官田線", "雙層巴士"]
 }
 
-# --- TDX 驗證與資料處理類別 ---
 auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
 
 class Auth():
     def __init__(self, app_id, app_key):
         self.app_id = app_id
         self.app_key = app_key
+
     def get_auth_header(self):
         return {
             'content-type': 'application/x-www-form-urlencoded',
             'grant_type': 'client_credentials',
-            'client_id': self.app_id, 
-            'client_secret': self.app_key 
+            'client_id': self.app_id,
+            'client_secret': self.app_key
         }
 
 class DataProcessor():
     def __init__(self, auth_response):
         self.auth_response = auth_response
+
     def get_data_header(self):
         auth_JSON = self.auth_response.json()
         access_token = auth_JSON.get('access_token')
@@ -79,26 +74,6 @@ class DataProcessor():
             'Accept-Encoding': 'gzip'
         }
 
-
-# 4. 主程式與資料抓取 (這裡填入你剩下的 fetch_data, AI Chat 等邏輯)
-
-# ... (請將你原本的 API 呼叫、路線選擇邏輯、AI 對話區貼在下方)
-
-# --- 主程式區 ---
-
-# 這裡放入你原有的 API 抓取邏輯 (auth_url, Auth, DataProcessor 等)
-# ... (建議保留你原有的這部分邏輯，確保驗證通過)
-
-# 渲染看板的關鍵邏輯：確保 html_buffer 唯一定義
-if st.session_state.get("route_choice"):
-    # (此處填入你獲取公車資料的邏輯，例如 active_list = ...)
-    # 範例結構：
-    html_buffer = '<div class="timeline-container">'
-    # ... 在迴圈中處理 html_buffer ...
-    html_buffer += "</div>"
-    st.components.v1.html(html_buffer, height=600, scrolling=True)
-
-# 當使用者選了路線，才去 TDX 抓該路線的「所有站點」清單（有快取 1 小時）
 @st.cache_data(ttl=3600)
 def fetch_route_stops(route_name, headers_dict):
     try:
@@ -108,7 +83,6 @@ def fetch_route_stops(route_name, headers_dict):
                 return local_cache[route_name]
     except FileNotFoundError:
         pass
-
     stops_url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/Tainan/{route_name}?%24format=JSON"
     try:
         res = requests.get(stops_url, headers=headers_dict)
@@ -120,21 +94,19 @@ def fetch_route_stops(route_name, headers_dict):
         return []
     return []
 
-# 關鍵：當按下按鈕，才會動態抓取公車「即時預估到站時刻」（有快取 30 秒控制頻率）
 @st.cache_data(ttl=30)
 def fetch_bus_data(route_name, headers_dict):
     url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/Tainan/{route_name}?%24format=JSON"
     try:
         res = requests.get(url, headers=headers_dict)
-        if res.status_code == 200: 
-            return res.json() 
+        if res.status_code == 200:
+            return res.json()
     except Exception as e:
         st.error(f"即時資料抓取失敗: {e}")
         return None
     return None
 
-# 抓取台南即時氣象的函數
-@st.cache_data(ttl=600) 
+@st.cache_data(ttl=600)
 def fetch_weather_data(headers_dict):
     weather_url = "https://tdx.transportdata.tw/api/basic/v1/Weather/Observation/Station/City/Tainan?%24format=JSON"
     try:
@@ -150,23 +122,82 @@ def fetch_weather_data(headers_dict):
         return "暫時無法取得氣象資訊"
     return "尚無氣象資料"
 
-# --- 程式執行主體 ---
+# ✅ CSS 樣式字串（獨立定義，塞進 html_buffer 裡，確保 iframe 內也能套用）
+TIMELINE_CSS = """
+<style>
+* { box-sizing: border-box; font-family: 'Noto Sans TC', sans-serif; }
+body { margin: 0; padding: 8px; background: transparent; }
+.timeline-container {
+    position: relative;
+    padding-left: 35px;
+    margin-left: 15px;
+    border-left: 4px solid #4A90E2;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+.timeline-item { position: relative; margin-bottom: 18px; }
+.timeline-circle {
+    position: absolute;
+    left: -44px; top: 12px;
+    width: 14px; height: 14px;
+    background-color: white;
+    border: 4px solid #4A90E2;
+    border-radius: 50%;
+    z-index: 2;
+}
+.station-box {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #FAFAFA;
+    padding: 10px 15px;
+    border-radius: 8px;
+    border: 1px solid #EAEAEA;
+    min-height: 55px;
+}
+.station-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.station-name { font-size: 15px; font-weight: bold; color: #333333; }
+.bus-tag {
+    background-color: #FF5A5F; color: white;
+    padding: 3px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: bold;
+    display: inline-flex; align-items: center;
+}
+.wheelchair-tag {
+    background-color: #2ECC71; color: white;
+    padding: 3px 6px; border-radius: 4px;
+    font-size: 11px; font-weight: bold;
+    display: inline-flex; align-items: center;
+}
+.time-badge {
+    padding: 6px 12px; border-radius: 20px;
+    color: white; font-weight: bold; font-size: 12px;
+    min-width: 90px; text-align: center; display: inline-block;
+}
+.ts-gray   { background-color: #BDBDBD; }
+.ts-orange { background-color: #FFA726; animation: pulse 1s infinite; }
+.ts-green  { background-color: #66BB6A; }
+@keyframes pulse {
+    0%   { opacity: 0.8; }
+    50%  { opacity: 1.0; }
+    100% { opacity: 0.8; }
+}
+</style>
+"""
+
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
     st.header("🚌 台南公車即時時刻查詢")
 
     try:
-        # 1. 執行身份驗證
         a = Auth(app_id, app_key)
         auth_res = requests.post(auth_url, data=a.get_auth_header())
         d = DataProcessor(auth_res)
         h = d.get_data_header()
 
-        # --- 初始化預設變數給 AI 使用 ---
         current_weather = "使用者尚未查詢"
         bus_status = "使用者尚未查詢路線"
 
-        # 側邊欄設定
         with st.sidebar:
             st.title("🚌 快速路線篩選")
 
@@ -178,50 +209,44 @@ if __name__ == '__main__':
 
             st.write("請點選顏色或數字進行篩選：")
 
-            # 第一排按鈕
-                        # 第一排按鈕
-                        # 第一排
             cols1 = st.columns(4)
             if cols1[0].button("綠", use_container_width=True): st.session_state.selected_filter = "綠"; reset_search()
             if cols1[1].button("橘", use_container_width=True): st.session_state.selected_filter = "橘"; reset_search()
             if cols1[2].button("1", use_container_width=True): st.session_state.selected_filter = "1"; reset_search()
             if cols1[3].button("2", use_container_width=True): st.session_state.selected_filter = "2"; reset_search()
 
-            # 第二排
             cols2 = st.columns(4)
             if cols2[0].button("棕", use_container_width=True): st.session_state.selected_filter = "棕"; reset_search()
             if cols2[1].button("藍", use_container_width=True): st.session_state.selected_filter = "藍"; reset_search()
             if cols2[2].button("3", use_container_width=True): st.session_state.selected_filter = "3"; reset_search()
             if cols2[3].button("4", use_container_width=True): st.session_state.selected_filter = "4"; reset_search()
 
-            # 第三排
             cols3 = st.columns(4)
             if cols3[0].button("紅", use_container_width=True): st.session_state.selected_filter = "紅"; reset_search()
             if cols3[1].button("黃", use_container_width=True): st.session_state.selected_filter = "黃"; reset_search()
             if cols3[2].button("5", use_container_width=True): st.session_state.selected_filter = "5"; reset_search()
             if cols3[3].button("6", use_container_width=True): st.session_state.selected_filter = "6"; reset_search()
 
-            # 第四排
             cols4 = st.columns(4)
             if cols4[0].button("市區", use_container_width=True): st.session_state.selected_filter = "市區"; reset_search()
             if cols4[1].button("高鐵", use_container_width=True): st.session_state.selected_filter = "高鐵"; reset_search()
             if cols4[2].button("7", use_container_width=True): st.session_state.selected_filter = "7"; reset_search()
             if cols4[3].button("8", use_container_width=True): st.session_state.selected_filter = "8"; reset_search()
 
-            # 第五排
             cols5 = st.columns(4)
             if cols5[0].button("觀光", use_container_width=True): st.session_state.selected_filter = "觀光"; reset_search()
             if cols5[1].button("9", use_container_width=True): st.session_state.selected_filter = "9"; reset_search()
             if cols5[2].button("0", use_container_width=True): st.session_state.selected_filter = "0"; reset_search()
 
-            st.write("") # 留空保持排版整齊
+            st.write("")
+            st.write("")
 
-            st.write("") 
             if st.button("❌ 清除篩選條件", use_container_width=True):
                 st.session_state.selected_filter = None
                 reset_search()
 
             current_filter = st.session_state.selected_filter
+
             if current_filter == "高鐵":
                 st.success("目前已選擇篩選：【高鐵快捷公車】")
             elif current_filter == "觀光":
@@ -234,7 +259,6 @@ if __name__ == '__main__':
             all_possible_routes = []
             for routes_list in ROUTE_CATEGORIES.values():
                 all_possible_routes.extend(routes_list)
-
             seen = set()
             all_possible_routes = [x for x in all_possible_routes if not (x in seen or seen.add(x))]
 
@@ -248,7 +272,6 @@ if __name__ == '__main__':
                 filtered_routes = ROUTE_CATEGORIES["觀光"]
             else:
                 raw_filtered = [r for r in all_possible_routes if current_filter in r]
-
                 if current_filter.isdigit():
                     def custom_numeric_sort(route_str):
                         just_nums = ''.join([c for c in route_str if c.isdigit()])
@@ -258,13 +281,12 @@ if __name__ == '__main__':
                                 return (0, val, route_str)
                             return (1, val, route_str)
                         return (2, 999, route_str)
-
                     filtered_routes = sorted(raw_filtered, key=custom_numeric_sort)
                 else:
                     filtered_routes = raw_filtered
 
             route_choice = st.selectbox(
-                "請選擇公車路線", 
+                "請選擇公車路線",
                 filtered_routes,
                 index=None,
                 placeholder="請選擇或輸入路線...",
@@ -286,39 +308,16 @@ if __name__ == '__main__':
 
             st.write("---")
             with st.expander("⚙️ 系統維護工具"):
-    
-                st.caption("(每個月或台南公車大改點時，點擊下方按鈕一次即可：)")
-                if st.button("預載並更新全台南站點資料（一個月點一次）", use_container_width=True):
+                st.caption("每個月或台南公車大改點時，點擊下方按鈕一次即可。")
+                if st.button("🔄 預載並更新全台南站點資料 (一個月點一次)", use_container_width=True):
                     with st.spinner("正在將全台南公車站點離線化，請稍候..."):
                         all_cache = {}
                         progress_bar = st.progress(0)
-
-            # --- 確保這裡直接接下面抓資料的邏輯，不要有 html_buffer 或 item！ ---
-
-            
                         all_routes_to_fetch = []
                         for r_list in ROUTE_CATEGORIES.values():
                             all_routes_to_fetch.extend(r_list)
                         all_routes_to_fetch = list(set(all_routes_to_fetch))
                         total_routes = len(all_routes_to_fetch)
-
-            # (下面接續原本的 for idx, r_name in enumerate(all_routes_to_fetch): 邏輯)
-
-                                            # 1. 確保有這行！初始化 HTML 字串容器
-
-
-                    for r_list in ROUTE_CATEGORIES.values():
-                        s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
-
-
-
-
-
-                        for r_list in ROUTE_CATEGORIES.values():
-                            all_routes_to_fetch.extend(r_list)
-                        all_routes_to_fetch = list(set(all_routes_to_fetch))
-                        total_routes = len(all_routes_to_fetch)
-
                         for idx, r_name in enumerate(all_routes_to_fetch):
                             s_url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/Tainan/{r_name}?%24format=JSON"
                             try:
@@ -330,7 +329,6 @@ if __name__ == '__main__':
                             except:
                                 all_cache[r_name] = []
                             progress_bar.progress((idx + 1) / total_routes)
-
                         with open("tainan_stops_cache.json", "w", encoding="utf-8") as f:
                             json.dump(all_cache, f, ensure_ascii=False, indent=4)
                         st.success("🎉 全台南站點快取建立成功！已完美離線化。")
@@ -338,17 +336,12 @@ if __name__ == '__main__':
         # --- 3. 公車時刻顯示區 ---
         if route_choice and st.session_state.get("search_clicked", False):
             weather_info = fetch_weather_data(h)
-            current_weather = weather_info 
-
+            current_weather = weather_info
             bus_list = fetch_bus_data(route_choice, h)
 
             if bus_list is not None:
-                direction_0 = [item for item in bus_list if item.get("Direction") == 0]
-                direction_1 = [item for item in bus_list if item.get("Direction") == 1]
-
-                direction_0 = sorted(direction_0, key=lambda x: x.get('StopSequence', 0))
-                direction_1 = sorted(direction_1, key=lambda x: x.get('StopSequence', 0))
-
+                direction_0 = sorted([item for item in bus_list if item.get("Direction") == 0], key=lambda x: x.get('StopSequence', 0))
+                direction_1 = sorted([item for item in bus_list if item.get("Direction") == 1], key=lambda x: x.get('StopSequence', 0))
                 dest_0 = direction_0[-1].get("StopName", {}).get("Zh_tw", "去程") if direction_0 else "去程"
                 dest_1 = direction_1[-1].get("StopName", {}).get("Zh_tw", "回程") if direction_1 else "回程"
 
@@ -373,36 +366,15 @@ if __name__ == '__main__':
                 active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
 
                 if active_list:
-                    st.markdown("""
-                        <style>
-                        .timeline-container { position: relative; padding-left: 35px; margin-left: 15px; border-left: 4px solid #4A90E2; padding-top: 10px; padding-bottom: 10px; }
-                        .timeline-item { position: relative; margin-bottom: 18px; }
-                        .timeline-circle { position: absolute; left: -44px; top: 12px; width: 14px; height: 14px; background-color: white; border: 4px solid #4A90E2; border-radius: 50%; z-index: 2; }
-                        .station-box { display: flex; justify-content: space-between; align-items: center; background-color: #FAFAFA; padding: 10px 15px; border-radius: 8px; border: 1px solid #EAEAEA; min-height: 55px; }
-                        .station-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-                        .station-name { font-size: 15px; font-weight: bold; color: #333333; }
-                        .bus-tag { background-color: #FF5A5F; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; }
-                        .wheelchair-tag { background-color: #2ECC71; color: white; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-flex; align-items: center; }
-                        .time-badge { padding: 6px 12px; border-radius: 20px; color: white; font-weight: bold; font-size: 12px; min-width: 90px; text-align: center; display: inline-block; }
-                        .ts-gray { background-color: #BDBDBD; }
-                        .ts-orange { background-color: #FFA726; animation: pulse 1s infinite; }
-                        .ts-green { background-color: #66BB6A; }
-                        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
-                        </style>
-                    """, unsafe_allow_html=True)
-
-
-                        # ✅ 修正後的正確順序
-                    html_buffer = '<div class="timeline-container">'
+                    # ✅ 關鍵修正：CSS 直接包進 html_buffer，不靠外層 st.markdown
+                    html_buffer = TIMELINE_CSS + '<div class="timeline-container">'
                     ai_log_list = []
-                    for item in active_list:
-                        # ... 底下原本的程式碼都不動 ...
 
+                    for item in active_list:
                         s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
                         eta_seconds = item.get("EstimateTime")
                         stop_status = item.get("StopStatus", 0)
                         plate_number = item.get("PlateNumb", "")
-
                         v_type = item.get("VehicleType")
                         is_low_floor = (v_type in [3, 4]) or (item.get("IsLowFloor") == True)
                         car_size = "中巴" if v_type == 2 else "大巴"
@@ -425,30 +397,31 @@ if __name__ == '__main__':
                             bus_html = f'<span class="bus-tag">🚌 {plate_number} ({car_size})</span><span class="wheelchair-tag">{wheelchair_text}</span>'
 
                         html_buffer += f"""
-                        <div class="timeline-item">
-                            <div class="timeline-circle"></div>
-                            <div class="station-box">
-                                <div class="station-info">
-                                    <span class="station-name">{s_name}</span>
-                                    {bus_html}
-                                </div>
-                                <span class="time-badge {badge_cls}">{time_text}</span>
-                            </div>
-                        </div>
-                        """
-
-                    if start_st and s_name == start_st:
-                        ai_log_list.append({
-                            "當前等候站": s_name, 
-                            "動態": time_text, 
-                            "車牌": plate_number if plate_number else "無",
-                            "是否無障礙": "是" if is_low_floor else "否"
-                        })
+<div class="timeline-item">
+  <div class="timeline-circle"></div>
+  <div class="station-box">
+    <div class="station-info">
+      <span class="station-name">{s_name}</span>
+      {bus_html}
+    </div>
+    <span class="time-badge {badge_cls}">{time_text}</span>
+  </div>
+</div>
+"""
+                        if start_st and s_name == start_st:
+                            ai_log_list.append({
+                                "當前等候站": s_name,
+                                "動態": time_text,
+                                "車牌": plate_number if plate_number else "無",
+                                "是否無障礙": "是" if is_low_floor else "否"
+                            })
 
                     html_buffer += "</div>"
                     st.components.v1.html(html_buffer, height=600, scrolling=True)
+
                     target_st_name = start_st if start_st else "未設定"
                     bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
+
                 else:
                     st.info("暫時無此方向的站點班次資訊。")
             else:
@@ -476,24 +449,21 @@ if __name__ == '__main__':
                 st.write(user_question)
 
             with st.spinner("AI 正在思考中..."):
-                try:  
+                try:
                     prompt_content = f"【目前天氣】: {current_weather}\n【公車狀態】: {bus_status}"
                     current_user_payload = f"{prompt_content}\n使用者問題 : {user_question}"
 
                     groq_messages = [
                         {"role": "system", "content": "你是一位專業、友善的台南公車導遊。請根據當前的天氣、公車狀態以及使用者之前的對話脈絡，給予貼心流暢的中文回答。"}
                     ]
-
                     for hist in st.session_state.chat_history:
                         groq_messages.append({"role": hist["role"], "content": hist["content"]})
-
                     groq_messages.append({"role": "user", "content": current_user_payload})
 
                     chat_completion = client.chat.completions.create(
                         messages=groq_messages,
                         model="llama-3.3-70b-versatile"
                     )
-
                     ai_text = chat_completion.choices[0].message.content
 
                     with st.chat_message("assistant"):
@@ -502,8 +472,8 @@ if __name__ == '__main__':
                     st.session_state.chat_history.append({"role": "user", "content": user_question})
                     st.session_state.chat_history.append({"role": "assistant", "content": ai_text})
 
-                except Exception as ai_e:                  
+                except Exception as ai_e:
                     st.error(f"抱歉，AI 助理暫時發生錯誤：{ai_e}")
 
-    except Exception as e:  
+    except Exception as e:
         st.error(f"發生系統錯誤 : {e}")
