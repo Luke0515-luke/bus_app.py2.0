@@ -364,24 +364,38 @@ if __name__ == '__main__':
 
                     active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
 
-                    if active_list:
+                    # ✅ 抓完整站點清單（去程/回程分開）
+                    all_stops_raw = fetch_route_stops(route_choice, h)
+
+                    # 從即時資料建立「站名 → 即時資料」的查詢字典
+                    realtime_map = {}
+                    for item in active_list:
+                        s = item.get("StopName", {}).get("Zh_tw", "")
+                        if s:
+                            realtime_map[s] = item
+
+                    # 以完整站點清單為主，沒即時資料的站補上預設值
+                    full_stop_list = all_stops_raw if all_stops_raw else [
+                        item.get("StopName", {}).get("Zh_tw", "") for item in active_list
+                    ]
+
+                    if full_stop_list:
                         html_buffer = TIMELINE_CSS + '<div class="timeline-container">'
                         ai_log_list = []
 
-                        for item in active_list:
-                            s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
+                        for s_name in full_stop_list:
+                            item = realtime_map.get(s_name, {})
                             eta_seconds = item.get("EstimateTime")
-                            stop_status = item.get("StopStatus", 0)
+                            stop_status = item.get("StopStatus", 1)
                             plate_number = item.get("PlateNumb", "")
                             v_type = item.get("VehicleType")
                             is_low_floor = (v_type in [3, 4]) or (item.get("IsLowFloor") == True)
                             car_size = "中巴" if v_type == 2 else "大巴"
 
                             if eta_seconds is None:
-                                if stop_status == 1: time_text = "尚未發車"; badge_cls = "ts-gray"
-                                elif stop_status == 2: time_text = "交管不停"; badge_cls = "ts-gray"
+                                if stop_status == 2: time_text = "交管不停"; badge_cls = "ts-gray"
                                 elif stop_status == 3: time_text = "末班車已過"; badge_cls = "ts-gray"
-                                else: time_text = "未發車"; badge_cls = "ts-gray"
+                                else: time_text = "尚未發車"; badge_cls = "ts-gray"
                             elif eta_seconds <= 120:
                                 time_text = "即將進站"
                                 badge_cls = "ts-orange"
@@ -418,9 +432,10 @@ if __name__ == '__main__':
                         st.components.v1.html(html_buffer, height=600, scrolling=True)
 
                         target_st_name = start_st if start_st else "未設定"
+
                         bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
                     else:
-                        st.info("暫時無此方向的班次資訊。")
+                        st.info("暫時無此方向的站點資訊。")
                 else:
                     st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
             else:
