@@ -387,48 +387,60 @@ if __name__ == '__main__':
 
             # ── GPS 附近站牌功能 ──────────────────────────
             st.subheader("📍 附近公車站")
-            st.caption("輸入你的座標，找出附近站牌")
+            st.caption("點按鈕自動定位，找出附近站牌")
 
-            if "gps_lat" not in st.session_state:
-                st.session_state.gps_lat = ""
-            if "gps_lon" not in st.session_state:
-                st.session_state.gps_lon = ""
+            # 初始化座標 session_state
+            if "user_lat" not in st.session_state:
+                st.session_state.user_lat = None
+            if "user_lon" not in st.session_state:
+                st.session_state.user_lon = None
 
-            # 用 JS 讀取瀏覽器 GPS
+            # 從 query_params 讀取 JS 寫入的座標
+            qp = st.query_params
+            if "lat" in qp and "lon" in qp:
+                try:
+                    st.session_state.user_lat = float(qp["lat"])
+                    st.session_state.user_lon = float(qp["lon"])
+                except:
+                    pass
+
+            # JS：取得 GPS 後直接把座標寫進 URL query string，觸發 Streamlit rerun
             gps_html = """
 <button onclick="
   navigator.geolocation.getCurrentPosition(function(pos){
-    document.getElementById('lat_out').innerText = pos.coords.latitude.toFixed(6);
-    document.getElementById('lon_out').innerText = pos.coords.longitude.toFixed(6);
-  }, function(){ document.getElementById('lat_out').innerText='denied'; });
-" style="padding:6px 12px;border-radius:6px;background:#4A90E2;color:white;border:none;cursor:pointer;font-size:13px;">
-📡 取得我的位置
+    var lat = pos.coords.latitude.toFixed(6);
+    var lon = pos.coords.longitude.toFixed(6);
+    var url = window.parent.location.href.split('?')[0] + '?lat=' + lat + '&lon=' + lon;
+    window.parent.location.href = url;
+  }, function(err){
+    alert('無法取得位置，請確認瀏覽器已授權定位權限');
+  });
+" style="width:100%;padding:8px;border-radius:6px;background:#4A90E2;color:white;border:none;cursor:pointer;font-size:13px;font-weight:bold;">
+📡 取得我的位置並搜尋
 </button>
-<p style="margin-top:8px;font-size:12px;">
-緯度：<span id="lat_out" style="font-weight:bold;">—</span><br>
-經度：<span id="lon_out" style="font-weight:bold;">—</span>
-</p>
-<p style="font-size:11px;color:#888;">取得後手動輸入下方欄位</p>
 """
-            st.components.v1.html(gps_html, height=120)
+            st.components.v1.html(gps_html, height=60)
 
-            gps_lat_input = st.text_input("緯度 (PositionLat)", placeholder="例：22.9997", key="gps_lat_input")
-            gps_lon_input = st.text_input("經度 (PositionLon)", placeholder="例：120.2270", key="gps_lon_input")
-
-            if st.button("🔍 搜尋附近站牌", use_container_width=True):
-                try:
-                    u_lat = float(gps_lat_input)
-                    u_lon = float(gps_lon_input)
-                    with st.spinner("搜尋中..."):
-                        nearby_stops = fetch_nearby_bus_stops(u_lat, u_lon, h, radius_km=0.5)
-                    if nearby_stops:
-                        st.success(f"找到 {len(nearby_stops)} 個附近站牌（500m內）：")
-                        for ns in nearby_stops:
-                            st.write(f"🚏 **{ns['name']}**（{ns['dist']*1000:.0f}m）")
-                    else:
-                        st.warning("附近 500m 內無公車站牌")
-                except ValueError:
-                    st.error("請輸入有效的緯度/經度數字")
+            # 顯示目前座標
+            if st.session_state.user_lat and st.session_state.user_lon:
+                st.success(f"📍 {st.session_state.user_lat:.5f}, {st.session_state.user_lon:.5f}")
+                with st.spinner("搜尋附近站牌中..."):
+                    nearby_stops = fetch_nearby_bus_stops(
+                        st.session_state.user_lat, st.session_state.user_lon, h, radius_km=0.5
+                    )
+                if nearby_stops:
+                    st.write(f"**找到 {len(nearby_stops)} 個站牌（500m內）：**")
+                    for ns in nearby_stops:
+                        st.write(f"🚏 **{ns['name']}**（{ns['dist']*1000:.0f}m）")
+                else:
+                    st.warning("附近 500m 內無公車站牌")
+                if st.button("🗑️ 清除定位", use_container_width=True):
+                    st.session_state.user_lat = None
+                    st.session_state.user_lon = None
+                    st.query_params.clear()
+                    st.rerun()
+            else:
+                st.info("尚未定位")
 
             st.write("---")
 
@@ -684,5 +696,4 @@ if __name__ == '__main__':
                     st.error(f"抱歉，AI 助理暫時發生錯誤：{ai_e}")
 
     except Exception as e:
-        st.error(f"發生系統錯誤 : {e}")
         st.error(f"發生系統錯誤 : {e}")
