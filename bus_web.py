@@ -3,7 +3,6 @@ import streamlit as st
 import requests
 from groq import Groq
 
-# 1. 讀取 Secrets
 app_id = st.secrets["CLIENT_ID"]
 app_key = st.secrets["CLIENT_SECRET"]
 
@@ -53,7 +52,6 @@ class Auth():
     def __init__(self, app_id, app_key):
         self.app_id = app_id
         self.app_key = app_key
-
     def get_auth_header(self):
         return {
             'content-type': 'application/x-www-form-urlencoded',
@@ -65,7 +63,6 @@ class Auth():
 class DataProcessor():
     def __init__(self, auth_response):
         self.auth_response = auth_response
-
     def get_data_header(self):
         auth_JSON = self.auth_response.json()
         access_token = auth_JSON.get('access_token')
@@ -122,7 +119,6 @@ def fetch_weather_data(headers_dict):
         return "暫時無法取得氣象資訊"
     return "尚無氣象資料"
 
-# ✅ CSS 樣式字串（獨立定義，塞進 html_buffer 裡，確保 iframe 內也能套用）
 TIMELINE_CSS = """
 <style>
 * { box-sizing: border-box; font-family: 'Noto Sans TC', sans-serif; }
@@ -186,7 +182,7 @@ body { margin: 0; padding: 8px; background: transparent; }
 """
 
 if __name__ == '__main__':
-    st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌")
+    st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌", layout="wide")
     st.header("🚌 台南公車即時時刻查詢")
 
     try:
@@ -198,8 +194,11 @@ if __name__ == '__main__':
         current_weather = "使用者尚未查詢"
         bus_status = "使用者尚未查詢路線"
 
-        with st.sidebar:
-            st.title("🚌 快速路線篩選")
+        # ✅ 改成左右並排欄位，比例 1:3
+        left_col, right_col = st.columns([1, 3])
+
+        with left_col:
+            st.subheader("🔍 路線篩選")
 
             def reset_search():
                 st.session_state.search_clicked = False
@@ -207,7 +206,7 @@ if __name__ == '__main__':
             if "selected_filter" not in st.session_state:
                 st.session_state.selected_filter = None
 
-            st.write("請點選顏色或數字進行篩選：")
+            st.caption("點選顏色或數字篩選：")
 
             cols1 = st.columns(4)
             if cols1[0].button("綠", use_container_width=True): st.session_state.selected_filter = "綠"; reset_search()
@@ -239,23 +238,22 @@ if __name__ == '__main__':
             if cols5[2].button("0", use_container_width=True): st.session_state.selected_filter = "0"; reset_search()
 
             st.write("")
-            st.write("")
-
-            if st.button("❌ 清除篩選條件", use_container_width=True):
+            if st.button("❌ 清除篩選", use_container_width=True):
                 st.session_state.selected_filter = None
                 reset_search()
 
             current_filter = st.session_state.selected_filter
 
             if current_filter == "高鐵":
-                st.success("目前已選擇篩選：【高鐵快捷公車】")
+                st.success("篩選：【高鐵快捷】")
             elif current_filter == "觀光":
-                st.success("目前已選擇篩選：【大台南觀光巴士】")
+                st.success("篩選：【觀光巴士】")
             elif current_filter:
-                st.success(f"目前已選擇篩選：【{current_filter}】")
+                st.success(f"篩選：【{current_filter}】")
             else:
-                st.info("目前顯示：全部路線")
+                st.info("顯示：全部路線")
 
+            # 路線清單
             all_possible_routes = []
             for routes_list in ROUTE_CATEGORIES.values():
                 all_possible_routes.extend(routes_list)
@@ -286,7 +284,7 @@ if __name__ == '__main__':
                     filtered_routes = raw_filtered
 
             route_choice = st.selectbox(
-                "請選擇公車路線",
+                "選擇路線",
                 filtered_routes,
                 index=None,
                 placeholder="請選擇或輸入路線...",
@@ -299,18 +297,18 @@ if __name__ == '__main__':
                 st.session_state.search_clicked = True
                 all_stops = fetch_route_stops(route_choice, h)
                 if all_stops:
-                    start_st = st.selectbox("請選擇你的等候站 (可選)", all_stops, index=0, key="start_select")
-                    end_st = st.selectbox("請選擇目的地 (僅作路徑參考)", all_stops, index=len(all_stops)-1, key="end_select")
+                    start_st = st.selectbox("等候站", all_stops, index=0, key="start_select")
+                    end_st = st.selectbox("目的地", all_stops, index=len(all_stops)-1, key="end_select")
                 else:
-                    st.warning(f"⚠️ 無法載入【{route_choice}】的站點資訊。")
+                    st.warning(f"⚠️ 無法載入【{route_choice}】站點。")
             else:
-                st.info("請先點選上方按鈕或在選單中選擇路線。")
+                st.info("請選擇路線")
 
             st.write("---")
-            with st.expander("⚙️ 系統維護工具"):
-                st.caption("每個月或台南公車大改點時，點擊下方按鈕一次即可。")
-                if st.button("🔄 預載並更新全台南站點資料 (一個月點一次)", use_container_width=True):
-                    with st.spinner("正在將全台南公車站點離線化，請稍候..."):
+            with st.expander("⚙️ 系統維護"):
+                st.caption("每月或大改點時更新一次。")
+                if st.button("🔄 更新全台南站點快取", use_container_width=True):
+                    with st.spinner("離線化中..."):
                         all_cache = {}
                         progress_bar = st.progress(0)
                         all_routes_to_fetch = []
@@ -331,72 +329,72 @@ if __name__ == '__main__':
                             progress_bar.progress((idx + 1) / total_routes)
                         with open("tainan_stops_cache.json", "w", encoding="utf-8") as f:
                             json.dump(all_cache, f, ensure_ascii=False, indent=4)
-                        st.success("🎉 全台南站點快取建立成功！已完美離線化。")
+                        st.success("🎉 快取建立成功！")
 
-        # --- 3. 公車時刻顯示區 ---
-        if route_choice and st.session_state.get("search_clicked", False):
-            weather_info = fetch_weather_data(h)
-            current_weather = weather_info
-            bus_list = fetch_bus_data(route_choice, h)
+        # ✅ 右欄：公車時刻顯示
+        with right_col:
+            if route_choice and st.session_state.get("search_clicked", False):
+                weather_info = fetch_weather_data(h)
+                current_weather = weather_info
+                bus_list = fetch_bus_data(route_choice, h)
 
-            if bus_list is not None:
-                direction_0 = sorted([item for item in bus_list if item.get("Direction") == 0], key=lambda x: x.get('StopSequence', 0))
-                direction_1 = sorted([item for item in bus_list if item.get("Direction") == 1], key=lambda x: x.get('StopSequence', 0))
-                dest_0 = direction_0[-1].get("StopName", {}).get("Zh_tw", "去程") if direction_0 else "去程"
-                dest_1 = direction_1[-1].get("StopName", {}).get("Zh_tw", "回程") if direction_1 else "回程"
+                if bus_list is not None:
+                    direction_0 = sorted([item for item in bus_list if item.get("Direction") == 0], key=lambda x: x.get('StopSequence', 0))
+                    direction_1 = sorted([item for item in bus_list if item.get("Direction") == 1], key=lambda x: x.get('StopSequence', 0))
+                    dest_0 = direction_0[-1].get("StopName", {}).get("Zh_tw", "去程") if direction_0 else "去程"
+                    dest_1 = direction_1[-1].get("StopName", {}).get("Zh_tw", "回程") if direction_1 else "回程"
 
-                st.subheader(f"🚌 {route_choice} 全線即時動態看板")
-                st.caption(f"🌡️ 當前天氣：{weather_info}")
+                    st.subheader(f"🚌 {route_choice} 全線即時動態")
+                    st.caption(f"🌡️ {weather_info}")
 
-                if "dir_toggle" not in st.session_state:
-                    st.session_state.dir_toggle = "去程"
-
-                col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1.5, 1])
-                with col_btn1:
-                    if st.button(f"➡️ 往 {dest_0}", use_container_width=True, type="primary" if st.session_state.dir_toggle == "去程" else "secondary"):
+                    if "dir_toggle" not in st.session_state:
                         st.session_state.dir_toggle = "去程"
-                with col_btn2:
-                    if st.button(f"⬅️ 往 {dest_1}", use_container_width=True, type="primary" if st.session_state.dir_toggle == "回程" else "secondary"):
-                        st.session_state.dir_toggle = "回程"
-                with col_btn3:
-                    if st.button("🔄 重新整理", use_container_width=True):
-                        st.toast("⏳ 正在更新即時站態...", icon="🚌")
-                        st.rerun()
 
-                active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
+                    col_btn1, col_btn2, col_btn3 = st.columns([1.5, 1.5, 1])
+                    with col_btn1:
+                        if st.button(f"➡️ 往 {dest_0}", use_container_width=True, type="primary" if st.session_state.dir_toggle == "去程" else "secondary"):
+                            st.session_state.dir_toggle = "去程"
+                    with col_btn2:
+                        if st.button(f"⬅️ 往 {dest_1}", use_container_width=True, type="primary" if st.session_state.dir_toggle == "回程" else "secondary"):
+                            st.session_state.dir_toggle = "回程"
+                    with col_btn3:
+                        if st.button("🔄 重新整理", use_container_width=True):
+                            st.toast("⏳ 正在更新...", icon="🚌")
+                            st.rerun()
 
-                if active_list:
-                    # ✅ 關鍵修正：CSS 直接包進 html_buffer，不靠外層 st.markdown
-                    html_buffer = TIMELINE_CSS + '<div class="timeline-container">'
-                    ai_log_list = []
+                    active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
 
-                    for item in active_list:
-                        s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
-                        eta_seconds = item.get("EstimateTime")
-                        stop_status = item.get("StopStatus", 0)
-                        plate_number = item.get("PlateNumb", "")
-                        v_type = item.get("VehicleType")
-                        is_low_floor = (v_type in [3, 4]) or (item.get("IsLowFloor") == True)
-                        car_size = "中巴" if v_type == 2 else "大巴"
+                    if active_list:
+                        html_buffer = TIMELINE_CSS + '<div class="timeline-container">'
+                        ai_log_list = []
 
-                        if eta_seconds is None:
-                            if stop_status == 1: time_text = "尚未發車"; badge_cls = "ts-gray"
-                            elif stop_status == 2: time_text = "交管不停"; badge_cls = "ts-gray"
-                            elif stop_status == 3: time_text = "末班車已過"; badge_cls = "ts-gray"
-                            else: time_text = "未發車"; badge_cls = "ts-gray"
-                        elif eta_seconds <= 120:
-                            time_text = "即將進站"
-                            badge_cls = "ts-orange"
-                        else:
-                            time_text = f"{eta_seconds // 60} 分鐘"
-                            badge_cls = "ts-green"
+                        for item in active_list:
+                            s_name = item.get("StopName", {}).get("Zh_tw", "未知站點")
+                            eta_seconds = item.get("EstimateTime")
+                            stop_status = item.get("StopStatus", 0)
+                            plate_number = item.get("PlateNumb", "")
+                            v_type = item.get("VehicleType")
+                            is_low_floor = (v_type in [3, 4]) or (item.get("IsLowFloor") == True)
+                            car_size = "中巴" if v_type == 2 else "大巴"
 
-                        bus_html = ""
-                        if plate_number and plate_number != "🧱" and plate_number != "無車牌":
-                            wheelchair_text = "♿ 低底盤" if is_low_floor else "一般車"
-                            bus_html = f'<span class="bus-tag">🚌 {plate_number} ({car_size})</span><span class="wheelchair-tag">{wheelchair_text}</span>'
+                            if eta_seconds is None:
+                                if stop_status == 1: time_text = "尚未發車"; badge_cls = "ts-gray"
+                                elif stop_status == 2: time_text = "交管不停"; badge_cls = "ts-gray"
+                                elif stop_status == 3: time_text = "末班車已過"; badge_cls = "ts-gray"
+                                else: time_text = "未發車"; badge_cls = "ts-gray"
+                            elif eta_seconds <= 120:
+                                time_text = "即將進站"
+                                badge_cls = "ts-orange"
+                            else:
+                                time_text = f"{eta_seconds // 60} 分鐘"
+                                badge_cls = "ts-green"
 
-                        html_buffer += f"""
+                            bus_html = ""
+                            if plate_number and plate_number != "🧱" and plate_number != "無車牌":
+                                wheelchair_text = "♿ 低底盤" if is_low_floor else "一般車"
+                                bus_html = f'<span class="bus-tag">🚌 {plate_number} ({car_size})</span><span class="wheelchair-tag">{wheelchair_text}</span>'
+
+                            html_buffer += f"""
 <div class="timeline-item">
   <div class="timeline-circle"></div>
   <div class="station-box">
@@ -408,26 +406,27 @@ if __name__ == '__main__':
   </div>
 </div>
 """
-                        if start_st and s_name == start_st:
-                            ai_log_list.append({
-                                "當前等候站": s_name,
-                                "動態": time_text,
-                                "車牌": plate_number if plate_number else "無",
-                                "是否無障礙": "是" if is_low_floor else "否"
-                            })
+                            if start_st and s_name == start_st:
+                                ai_log_list.append({
+                                    "當前等候站": s_name,
+                                    "動態": time_text,
+                                    "車牌": plate_number if plate_number else "無",
+                                    "是否無障礙": "是" if is_low_floor else "否"
+                                })
 
-                    html_buffer += "</div>"
-                    st.components.v1.html(html_buffer, height=600, scrolling=True)
+                        html_buffer += "</div>"
+                        st.components.v1.html(html_buffer, height=600, scrolling=True)
 
-                    target_st_name = start_st if start_st else "未設定"
-                    bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
-
+                        target_st_name = start_st if start_st else "未設定"
+                        bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
+                    else:
+                        st.info("暫時無此方向的班次資訊。")
                 else:
-                    st.info("暫時無此方向的站點班次資訊。")
+                    st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
             else:
-                st.error("無法取得即時動態，請檢查網路或 TDX 帳號狀態。")
+                st.info("👈 請從左側選擇路線開始查詢")
 
-        # --- 4. AI 對話區 ---
+        # ✅ AI 問答區（獨立一整排在最下面）
         st.divider()
         st.subheader("🤖 問問 AI 助理")
 
@@ -435,12 +434,8 @@ if __name__ == '__main__':
             st.session_state.chat_history = []
 
         for message in st.session_state.chat_history:
-            if message["role"] == "user":
-                with st.chat_message("user"):
-                    st.write(message["content"])
-            else:
-                with st.chat_message("assistant"):
-                    st.write(message["content"])
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
 
         user_question = st.chat_input("有什麼我可以幫忙的嗎？(可查公車建議、台南景點等)")
 
