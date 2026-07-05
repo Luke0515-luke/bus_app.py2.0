@@ -1,4 +1,5 @@
 import json
+import math
 import streamlit as st
 import requests
 from groq import Groq
@@ -71,6 +72,16 @@ class DataProcessor():
             'Accept-Encoding': 'gzip'
         }
 
+# ── 公里距離計算（Haversine）──────────────────────────────
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = math.sin(d_lat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lon/2)**2
+    return R * 2 * math.asin(math.sqrt(a))
+
+# ── 快取函數 ──────────────────────────────────────────────
+
 @st.cache_data(ttl=3600)
 def fetch_route_stops(route_name, headers_dict):
     try:
@@ -103,84 +114,153 @@ def fetch_bus_data(route_name, headers_dict):
         return None
     return None
 
+# ── 天氣：改用 Open-Meteo（免費、不需 API key、可指定座標） ──
 @st.cache_data(ttl=600)
-def fetch_weather_data(headers_dict):
-    weather_url = "https://tdx.transportdata.tw/api/basic/v1/Weather/Observation/Station/City/Tainan?%24format=JSON"
+def fetch_weather_by_coord(lat, lon, label=""):
     try:
-        res = requests.get(weather_url, headers=headers_dict)
+        url = (
+            f"https://api.open-meteo.com/v1/forecast"
+            f"?latitude={lat}&longitude={lon}"
+            f"&current=temperature_2m,weathercode,windspeed_10m"
+            f"&timezone=Asia%2FTaipei"
+        )
+        res = requests.get(url, timeout=5)
         if res.status_code == 200:
             data = res.json()
-            if data:
-                obs = data[0]
-                temp = obs.get('AirTemperature', '未知')
-                weather_desc = obs.get('Weather', '未知')
-                return f"氣溫 {temp}°C，天氣狀況：{weather_desc}"
+            cur = data.get("current", {})
+            temp = cur.get("temperature_2m", "?")
+            wcode = cur.get("weathercode", -1)
+            wind = cur.get("windspeed_10m", "?")
+            # WMO 天氣碼簡易對照
+            wcode_map = {
+                0: "晴天☀️", 1: "大致晴朗🌤️", 2: "部分多雲⛅", 3: "陰天☁️",
+                45: "有霧🌫️", 48: "凍霧🌫️",
+                51: "毛毛雨🌦️", 53: "毛毛雨🌦️", 55: "濃毛毛雨🌧️",
+                61: "小雨🌧️", 63: "中雨🌧️", 65: "大雨🌧️",
+                71: "小雪❄️", 73: "中雪❄️", 75: "大雪❄️",
+                80: "陣雨🌦️", 81: "中陣雨🌧️", 82: "強陣雨⛈️",
+                95: "雷雨⛈️", 96: "雷雨夾雹⛈️", 99: "強雷雨夾雹⛈️"
+            }
+            desc = wcode_map.get(wcode, f"天氣碼{wcode}")
+            prefix = f"【{label}】" if label else ""
+            return f"{prefix}{desc}，氣溫 {temp}°C，風速 {wind} km/h"
     except:
-        return "暫時無法取得氣象資訊"
-    return "尚無氣象資料"
+        pass
+    return "無法取得天氣資訊"
 
+# ── UBike：查詢指定座標附近站點（台南） ──
+@st.cache_data(ttl=60)
+def fetch_ubike_near(lat, lon, headers_dict, radius_km=0.3):
+    url = "https://tdx.transportdata.tw/api/basic/v2/Bike/Station/City/Tainan?%24format=JSON"
+    avail_url = "https://tdx.transportdata.tw/api/basic/v2/Bike/Availability/City/Tainan?%24format=JSON"
+    try:
+        res = requests.get(url, headers=headers_dict, timeout=5)
+        avail_res = requests.get(avail_url, headers=headers_dict, timeout=5)
+        if res.status_code == 200 and avail_res.status_code == 200:
+            stations = res.json()
+            avail_list = avail_res.json()
+            avail_map = {a["StationUID"]: a for a in avail_list}
+            nearby = []
+            for st_info in stations:
+                pos = st_info.get("StationPosition", {})
+                s_lat = pos.get("PositionLat")
+                s_lon = pos.get("PositionLon")
+                if s_lat and s_lon:
+                    dist = haversine(lat, lon, s_lat, s_lon)
+                    if dist <= radius_km:
+                        uid = st_info.get("StationUID", "")
+                        av = avail_map.get(uid, {})
+                        nearby.append({
+                            "name": st_info.get("StationName", {}).get("Zh_tw", "未知"),
+                            "dist": dist,
+                            "available": av.get("AvailableRentBikes", "?"),
+                            "empty": av.get("AvailableReturnBikes", "?")
+                        })
+            nearby.sort(key=lambda x: x["dist"])
+            return nearby
+    except:
+        pass
+    return []
+
+# ── 附近公車站：查詢指定座標附近站牌 ──
+@st.cache_data(ttl=300)
+def fetch_nearby_bus_stops(lat, lon, headers_dict, radius_km=0.5):
+    url = "https://tdx.transportdata.tw/api/basic/v2/Bus/Stop/City/Tainan?%24format=JSON"
+    try:
+        res = requests.get(url, headers=headers_dict, timeout=10)
+        if res.status_code == 200:
+            stops = res.json()
+            nearby = []
+            seen = set()
+            for stop in stops:
+                pos = stop.get("StopPosition", {})
+                s_lat = pos.get("PositionLat")
+                s_lon = pos.get("PositionLon")
+                name = stop.get("StopName", {}).get("Zh_tw", "")
+                if s_lat and s_lon and name and name not in seen:
+                    dist = haversine(lat, lon, s_lat, s_lon)
+                    if dist <= radius_km:
+                        seen.add(name)
+                        nearby.append({"name": name, "dist": dist})
+            nearby.sort(key=lambda x: x["dist"])
+            return nearby[:15]
+    except:
+        pass
+    return []
+
+# ── CSS ──────────────────────────────────────────────────
 TIMELINE_CSS = """
 <style>
 * { box-sizing: border-box; font-family: 'Noto Sans TC', sans-serif; }
 body { margin: 0; padding: 8px; background: transparent; }
 .timeline-container {
-    position: relative;
-    padding-left: 35px;
-    margin-left: 15px;
-    border-left: 4px solid #4A90E2;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    position: relative; padding-left: 35px;
+    margin-left: 15px; border-left: 4px solid #4A90E2;
+    padding-top: 10px; padding-bottom: 10px;
 }
 .timeline-item { position: relative; margin-bottom: 18px; }
 .timeline-circle {
-    position: absolute;
-    left: -44px; top: 12px;
-    width: 14px; height: 14px;
-    background-color: white;
-    border: 4px solid #4A90E2;
-    border-radius: 50%;
-    z-index: 2;
+    position: absolute; left: -44px; top: 12px;
+    width: 14px; height: 14px; background-color: white;
+    border: 4px solid #4A90E2; border-radius: 50%; z-index: 2;
 }
 .station-box {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background-color: #FAFAFA;
-    padding: 10px 15px;
-    border-radius: 8px;
-    border: 1px solid #EAEAEA;
-    min-height: 55px;
+    display: flex; justify-content: space-between; align-items: center;
+    background-color: #FAFAFA; padding: 10px 15px;
+    border-radius: 8px; border: 1px solid #EAEAEA; min-height: 55px;
 }
 .station-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .station-name { font-size: 15px; font-weight: bold; color: #333333; }
 .bus-tag {
-    background-color: #FF5A5F; color: white;
-    padding: 3px 8px; border-radius: 4px;
-    font-size: 11px; font-weight: bold;
+    background-color: #FF5A5F; color: white; padding: 3px 8px;
+    border-radius: 4px; font-size: 11px; font-weight: bold;
     display: inline-flex; align-items: center;
 }
 .wheelchair-tag {
-    background-color: #2ECC71; color: white;
-    padding: 3px 6px; border-radius: 4px;
-    font-size: 11px; font-weight: bold;
+    background-color: #2ECC71; color: white; padding: 3px 6px;
+    border-radius: 4px; font-size: 11px; font-weight: bold;
     display: inline-flex; align-items: center;
 }
+.ubike-tag {
+    background-color: #007bff; color: white; padding: 3px 8px;
+    border-radius: 4px; font-size: 11px; font-weight: bold;
+    display: inline-flex; align-items: center; gap: 4px;
+}
 .time-badge {
-    padding: 6px 12px; border-radius: 20px;
-    color: white; font-weight: bold; font-size: 12px;
-    min-width: 90px; text-align: center; display: inline-block;
+    padding: 6px 12px; border-radius: 20px; color: white;
+    font-weight: bold; font-size: 12px; min-width: 90px;
+    text-align: center; display: inline-block;
 }
 .ts-gray   { background-color: #BDBDBD; }
 .ts-orange { background-color: #FFA726; animation: pulse 1s infinite; }
 .ts-green  { background-color: #66BB6A; }
 @keyframes pulse {
-    0%   { opacity: 0.8; }
-    50%  { opacity: 1.0; }
-    100% { opacity: 0.8; }
+    0%   { opacity: 0.8; } 50%  { opacity: 1.0; } 100% { opacity: 0.8; }
 }
 </style>
 """
 
+# ── 主程式 ────────────────────────────────────────────────
 if __name__ == '__main__':
     st.set_page_config(page_title="台南公車 AI 助理", page_icon="🚌", layout="wide")
     st.header("🚌 台南公車即時時刻查詢")
@@ -194,9 +274,14 @@ if __name__ == '__main__':
         current_weather = "使用者尚未查詢"
         bus_status = "使用者尚未查詢路線"
 
-        # ✅ 改成左右並排欄位，比例 1:3
+        # 台南市政府座標（預設天氣位置）
+        TAINAN_LAT, TAINAN_LON = 22.9997, 120.2270
+
         left_col, right_col = st.columns([1, 3])
 
+        # ════════════════════════════════════════
+        # 左欄：篩選 + GPS 功能
+        # ════════════════════════════════════════
         with left_col:
             st.subheader("🔍 路線篩選")
 
@@ -211,31 +296,31 @@ if __name__ == '__main__':
             cols1 = st.columns(4)
             if cols1[0].button("綠", use_container_width=True): st.session_state.selected_filter = "綠"; reset_search()
             if cols1[1].button("橘", use_container_width=True): st.session_state.selected_filter = "橘"; reset_search()
-            if cols1[2].button("1", use_container_width=True): st.session_state.selected_filter = "1"; reset_search()
-            if cols1[3].button("2", use_container_width=True): st.session_state.selected_filter = "2"; reset_search()
+            if cols1[2].button("1",  use_container_width=True): st.session_state.selected_filter = "1";  reset_search()
+            if cols1[3].button("2",  use_container_width=True): st.session_state.selected_filter = "2";  reset_search()
 
             cols2 = st.columns(4)
             if cols2[0].button("棕", use_container_width=True): st.session_state.selected_filter = "棕"; reset_search()
             if cols2[1].button("藍", use_container_width=True): st.session_state.selected_filter = "藍"; reset_search()
-            if cols2[2].button("3", use_container_width=True): st.session_state.selected_filter = "3"; reset_search()
-            if cols2[3].button("4", use_container_width=True): st.session_state.selected_filter = "4"; reset_search()
+            if cols2[2].button("3",  use_container_width=True): st.session_state.selected_filter = "3";  reset_search()
+            if cols2[3].button("4",  use_container_width=True): st.session_state.selected_filter = "4";  reset_search()
 
             cols3 = st.columns(4)
             if cols3[0].button("紅", use_container_width=True): st.session_state.selected_filter = "紅"; reset_search()
             if cols3[1].button("黃", use_container_width=True): st.session_state.selected_filter = "黃"; reset_search()
-            if cols3[2].button("5", use_container_width=True): st.session_state.selected_filter = "5"; reset_search()
-            if cols3[3].button("6", use_container_width=True): st.session_state.selected_filter = "6"; reset_search()
+            if cols3[2].button("5",  use_container_width=True): st.session_state.selected_filter = "5";  reset_search()
+            if cols3[3].button("6",  use_container_width=True): st.session_state.selected_filter = "6";  reset_search()
 
             cols4 = st.columns(4)
             if cols4[0].button("市區", use_container_width=True): st.session_state.selected_filter = "市區"; reset_search()
             if cols4[1].button("高鐵", use_container_width=True): st.session_state.selected_filter = "高鐵"; reset_search()
-            if cols4[2].button("7", use_container_width=True): st.session_state.selected_filter = "7"; reset_search()
-            if cols4[3].button("8", use_container_width=True): st.session_state.selected_filter = "8"; reset_search()
+            if cols4[2].button("7",    use_container_width=True): st.session_state.selected_filter = "7";    reset_search()
+            if cols4[3].button("8",    use_container_width=True): st.session_state.selected_filter = "8";    reset_search()
 
             cols5 = st.columns(4)
             if cols5[0].button("觀光", use_container_width=True): st.session_state.selected_filter = "觀光"; reset_search()
-            if cols5[1].button("9", use_container_width=True): st.session_state.selected_filter = "9"; reset_search()
-            if cols5[2].button("0", use_container_width=True): st.session_state.selected_filter = "0"; reset_search()
+            if cols5[1].button("9",    use_container_width=True): st.session_state.selected_filter = "9";    reset_search()
+            if cols5[2].button("0",    use_container_width=True): st.session_state.selected_filter = "0";    reset_search()
 
             st.write("")
             if st.button("❌ 清除篩選", use_container_width=True):
@@ -243,7 +328,6 @@ if __name__ == '__main__':
                 reset_search()
 
             current_filter = st.session_state.selected_filter
-
             if current_filter == "高鐵":
                 st.success("篩選：【高鐵快捷】")
             elif current_filter == "觀光":
@@ -257,8 +341,8 @@ if __name__ == '__main__':
             all_possible_routes = []
             for routes_list in ROUTE_CATEGORIES.values():
                 all_possible_routes.extend(routes_list)
-            seen = set()
-            all_possible_routes = [x for x in all_possible_routes if not (x in seen or seen.add(x))]
+            seen_set = set()
+            all_possible_routes = [x for x in all_possible_routes if not (x in seen_set or seen_set.add(x))]
 
             if current_filter is None:
                 filtered_routes = all_possible_routes
@@ -275,21 +359,16 @@ if __name__ == '__main__':
                         just_nums = ''.join([c for c in route_str if c.isdigit()])
                         if just_nums:
                             val = int(just_nums)
-                            if route_str.startswith(current_filter):
-                                return (0, val, route_str)
-                            return (1, val, route_str)
+                            return (0 if route_str.startswith(current_filter) else 1, val, route_str)
                         return (2, 999, route_str)
                     filtered_routes = sorted(raw_filtered, key=custom_numeric_sort)
                 else:
                     filtered_routes = raw_filtered
 
             route_choice = st.selectbox(
-                "選擇路線",
-                filtered_routes,
-                index=None,
+                "選擇路線", filtered_routes, index=None,
                 placeholder="請選擇或輸入路線...",
-                key="bus_route_select",
-                on_change=reset_search
+                key="bus_route_select", on_change=reset_search
             )
 
             start_st = None
@@ -298,23 +377,71 @@ if __name__ == '__main__':
                 all_stops = fetch_route_stops(route_choice, h)
                 if all_stops:
                     start_st = st.selectbox("等候站", all_stops, index=0, key="start_select")
-                    end_st = st.selectbox("目的地", all_stops, index=len(all_stops)-1, key="end_select")
+                    end_st   = st.selectbox("目的地", all_stops, index=len(all_stops)-1, key="end_select")
                 else:
                     st.warning(f"⚠️ 無法載入【{route_choice}】站點。")
             else:
                 st.info("請選擇路線")
 
             st.write("---")
+
+            # ── GPS 附近站牌功能 ──────────────────────────
+            st.subheader("📍 附近公車站")
+            st.caption("輸入你的座標，找出附近站牌")
+
+            if "gps_lat" not in st.session_state:
+                st.session_state.gps_lat = ""
+            if "gps_lon" not in st.session_state:
+                st.session_state.gps_lon = ""
+
+            # 用 JS 讀取瀏覽器 GPS
+            gps_html = """
+<button onclick="
+  navigator.geolocation.getCurrentPosition(function(pos){
+    document.getElementById('lat_out').innerText = pos.coords.latitude.toFixed(6);
+    document.getElementById('lon_out').innerText = pos.coords.longitude.toFixed(6);
+  }, function(){ document.getElementById('lat_out').innerText='denied'; });
+" style="padding:6px 12px;border-radius:6px;background:#4A90E2;color:white;border:none;cursor:pointer;font-size:13px;">
+📡 取得我的位置
+</button>
+<p style="margin-top:8px;font-size:12px;">
+緯度：<span id="lat_out" style="font-weight:bold;">—</span><br>
+經度：<span id="lon_out" style="font-weight:bold;">—</span>
+</p>
+<p style="font-size:11px;color:#888;">取得後手動輸入下方欄位</p>
+"""
+            st.components.v1.html(gps_html, height=120)
+
+            gps_lat_input = st.text_input("緯度 (PositionLat)", placeholder="例：22.9997", key="gps_lat_input")
+            gps_lon_input = st.text_input("經度 (PositionLon)", placeholder="例：120.2270", key="gps_lon_input")
+
+            if st.button("🔍 搜尋附近站牌", use_container_width=True):
+                try:
+                    u_lat = float(gps_lat_input)
+                    u_lon = float(gps_lon_input)
+                    with st.spinner("搜尋中..."):
+                        nearby_stops = fetch_nearby_bus_stops(u_lat, u_lon, h, radius_km=0.5)
+                    if nearby_stops:
+                        st.success(f"找到 {len(nearby_stops)} 個附近站牌（500m內）：")
+                        for ns in nearby_stops:
+                            st.write(f"🚏 **{ns['name']}**（{ns['dist']*1000:.0f}m）")
+                    else:
+                        st.warning("附近 500m 內無公車站牌")
+                except ValueError:
+                    st.error("請輸入有效的緯度/經度數字")
+
+            st.write("---")
+
+            # 系統維護
             with st.expander("⚙️ 系統維護"):
                 st.caption("每月或大改點時更新一次。")
                 if st.button("🔄 更新全台南站點快取", use_container_width=True):
                     with st.spinner("離線化中..."):
                         all_cache = {}
                         progress_bar = st.progress(0)
-                        all_routes_to_fetch = []
-                        for r_list in ROUTE_CATEGORIES.values():
-                            all_routes_to_fetch.extend(r_list)
-                        all_routes_to_fetch = list(set(all_routes_to_fetch))
+                        all_routes_to_fetch = list(set(
+                            r for r_list in ROUTE_CATEGORIES.values() for r in r_list
+                        ))
                         total_routes = len(all_routes_to_fetch)
                         for idx, r_name in enumerate(all_routes_to_fetch):
                             s_url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/Tainan/{r_name}?%24format=JSON"
@@ -331,12 +458,17 @@ if __name__ == '__main__':
                             json.dump(all_cache, f, ensure_ascii=False, indent=4)
                         st.success("🎉 快取建立成功！")
 
-        # ✅ 右欄：公車時刻顯示
+        # ════════════════════════════════════════
+        # 右欄：天氣 + 公車時刻 + UBike
+        # ════════════════════════════════════════
         with right_col:
             if route_choice and st.session_state.get("search_clicked", False):
-                weather_info = fetch_weather_data(h)
-                current_weather = weather_info
                 bus_list = fetch_bus_data(route_choice, h)
+
+                # ── 天氣顯示（用 Open-Meteo，台南座標） ──
+                weather_now = fetch_weather_by_coord(TAINAN_LAT, TAINAN_LON, "台南目前")
+                current_weather = weather_now
+                st.info(f"🌡️ {weather_now}")
 
                 if bus_list is not None:
                     direction_0 = sorted([item for item in bus_list if item.get("Direction") == 0], key=lambda x: x.get('StopSequence', 0))
@@ -345,7 +477,6 @@ if __name__ == '__main__':
                     dest_1 = direction_1[-1].get("StopName", {}).get("Zh_tw", "回程") if direction_1 else "回程"
 
                     st.subheader(f"🚌 {route_choice} 全線即時動態")
-                    st.caption(f"🌡️ {weather_info}")
 
                     if "dir_toggle" not in st.session_state:
                         st.session_state.dir_toggle = "去程"
@@ -364,17 +495,73 @@ if __name__ == '__main__':
 
                     active_list = direction_0 if st.session_state.dir_toggle == "去程" else direction_1
 
-                    # ✅ 抓完整站點清單（去程/回程分開）
-                    all_stops_raw = fetch_route_stops(route_choice, h)
+                    # ── 取得路線所有站點的座標（用於 UBike 查詢）──
+                    stops_with_coord_url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/Tainan/{route_choice}?%24format=JSON"
+                    stop_coord_map = {}  # 站名 → (lat, lon)
+                    try:
+                        coord_res = requests.get(stops_with_coord_url, headers=h, timeout=5)
+                        if coord_res.status_code == 200:
+                            coord_data = coord_res.json()
+                            target_dir = 0 if st.session_state.dir_toggle == "去程" else 1
+                            for route_dir in coord_data:
+                                if route_dir.get("Direction") == target_dir:
+                                    for s in route_dir.get("Stops", []):
+                                        name = s.get("StopName", {}).get("Zh_tw", "")
+                                        pos = s.get("StopPosition", {})
+                                        lat = pos.get("PositionLat")
+                                        lon = pos.get("PositionLon")
+                                        if name and lat and lon:
+                                            stop_coord_map[name] = (lat, lon)
+                    except:
+                        pass
 
-                    # 從即時資料建立「站名 → 即時資料」的查詢字典
+                    # ── 預先撈 UBike 全部站點（一次查，避免重複打 API）──
+                    ubike_all = []
+                    ubike_avail_map = {}
+                    try:
+                        ub_res = requests.get(
+                            "https://tdx.transportdata.tw/api/basic/v2/Bike/Station/City/Tainan?%24format=JSON",
+                            headers=h, timeout=5
+                        )
+                        ub_avail_res = requests.get(
+                            "https://tdx.transportdata.tw/api/basic/v2/Bike/Availability/City/Tainan?%24format=JSON",
+                            headers=h, timeout=5
+                        )
+                        if ub_res.status_code == 200:
+                            ubike_all = ub_res.json()
+                        if ub_avail_res.status_code == 200:
+                            for av in ub_avail_res.json():
+                                ubike_avail_map[av["StationUID"]] = av
+                    except:
+                        pass
+
+                    def get_ubike_near_stop(s_lat, s_lon, radius_km=0.3):
+                        """從已載入的 UBike 資料找附近站"""
+                        result = []
+                        for ub in ubike_all:
+                            pos = ub.get("StationPosition", {})
+                            u_lat = pos.get("PositionLat")
+                            u_lon = pos.get("PositionLon")
+                            if u_lat and u_lon:
+                                dist = haversine(s_lat, s_lon, u_lat, u_lon)
+                                if dist <= radius_km:
+                                    uid = ub.get("StationUID", "")
+                                    av = ubike_avail_map.get(uid, {})
+                                    result.append({
+                                        "name": ub.get("StationName", {}).get("Zh_tw", ""),
+                                        "available": av.get("AvailableRentBikes", "?"),
+                                        "empty": av.get("AvailableReturnBikes", "?")
+                                    })
+                        return result
+
+                    # ── 完整站點清單 ──
+                    all_stops_raw = fetch_route_stops(route_choice, h)
                     realtime_map = {}
                     for item in active_list:
                         s = item.get("StopName", {}).get("Zh_tw", "")
                         if s:
                             realtime_map[s] = item
 
-                    # 以完整站點清單為主，沒即時資料的站補上預設值
                     full_stop_list = all_stops_raw if all_stops_raw else [
                         item.get("StopName", {}).get("Zh_tw", "") for item in active_list
                     ]
@@ -393,20 +580,33 @@ if __name__ == '__main__':
                             car_size = "中巴" if v_type == 2 else "大巴"
 
                             if eta_seconds is None:
-                                if stop_status == 2: time_text = "交管不停"; badge_cls = "ts-gray"
+                                if stop_status == 2:   time_text = "交管不停";  badge_cls = "ts-gray"
                                 elif stop_status == 3: time_text = "末班車已過"; badge_cls = "ts-gray"
-                                else: time_text = "尚未發車"; badge_cls = "ts-gray"
+                                else:                  time_text = "尚未發車";  badge_cls = "ts-gray"
                             elif eta_seconds <= 120:
-                                time_text = "即將進站"
-                                badge_cls = "ts-orange"
+                                time_text = "即將進站"; badge_cls = "ts-orange"
                             else:
-                                time_text = f"{eta_seconds // 60} 分鐘"
-                                badge_cls = "ts-green"
+                                time_text = f"{eta_seconds // 60} 分鐘"; badge_cls = "ts-green"
 
                             bus_html = ""
-                            if plate_number and plate_number != "🧱" and plate_number != "無車牌":
+                            if plate_number and plate_number not in ("🧱", "無車牌"):
                                 wheelchair_text = "♿ 低底盤" if is_low_floor else "一般車"
-                                bus_html = f'<span class="bus-tag">🚌 {plate_number} ({car_size})</span><span class="wheelchair-tag">{wheelchair_text}</span>'
+                                bus_html = (
+                                    f'<span class="bus-tag">🚌 {plate_number} ({car_size})</span>'
+                                    f'<span class="wheelchair-tag">{wheelchair_text}</span>'
+                                )
+
+                            # ── UBike 標籤 ──
+                            ubike_html = ""
+                            if s_name in stop_coord_map:
+                                s_lat, s_lon = stop_coord_map[s_name]
+                                nearby_ub = get_ubike_near_stop(s_lat, s_lon)
+                                for ub in nearby_ub:
+                                    ubike_html += (
+                                        f'<span class="ubike-tag">'
+                                        f'🚲 可借:{ub["available"]} 可還:{ub["empty"]}'
+                                        f'</span>'
+                                    )
 
                             html_buffer += f"""
 <div class="timeline-item">
@@ -415,6 +615,7 @@ if __name__ == '__main__':
     <div class="station-info">
       <span class="station-name">{s_name}</span>
       {bus_html}
+      {ubike_html}
     </div>
     <span class="time-badge {badge_cls}">{time_text}</span>
   </div>
@@ -432,8 +633,10 @@ if __name__ == '__main__':
                         st.components.v1.html(html_buffer, height=600, scrolling=True)
 
                         target_st_name = start_st if start_st else "未設定"
-
-                        bus_status = f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。關注站點【{target_st_name}】的當前動態紀錄：{json.dumps(ai_log_list, ensure_ascii=False)}"
+                        bus_status = (
+                            f"使用者目前關注路線：{route_choice}（往{st.session_state.dir_toggle}方向）。"
+                            f"關注站點【{target_st_name}】的當前動態：{json.dumps(ai_log_list, ensure_ascii=False)}"
+                        )
                     else:
                         st.info("暫時無此方向的站點資訊。")
                 else:
@@ -441,7 +644,9 @@ if __name__ == '__main__':
             else:
                 st.info("👈 請從左側選擇路線開始查詢")
 
-        # ✅ AI 問答區（獨立一整排在最下面）
+        # ════════════════════════════════════════
+        # AI 問答區
+        # ════════════════════════════════════════
         st.divider()
         st.subheader("🤖 問問 AI 助理")
 
@@ -457,33 +662,27 @@ if __name__ == '__main__':
         if user_question:
             with st.chat_message("user"):
                 st.write(user_question)
-
             with st.spinner("AI 正在思考中..."):
                 try:
                     prompt_content = f"【目前天氣】: {current_weather}\n【公車狀態】: {bus_status}"
                     current_user_payload = f"{prompt_content}\n使用者問題 : {user_question}"
-
                     groq_messages = [
                         {"role": "system", "content": "你是一位專業、友善的台南公車導遊。請根據當前的天氣、公車狀態以及使用者之前的對話脈絡，給予貼心流暢的中文回答。"}
                     ]
                     for hist in st.session_state.chat_history:
                         groq_messages.append({"role": hist["role"], "content": hist["content"]})
                     groq_messages.append({"role": "user", "content": current_user_payload})
-
                     chat_completion = client.chat.completions.create(
-                        messages=groq_messages,
-                        model="llama-3.3-70b-versatile"
+                        messages=groq_messages, model="llama-3.3-70b-versatile"
                     )
                     ai_text = chat_completion.choices[0].message.content
-
                     with st.chat_message("assistant"):
                         st.write(ai_text)
-
                     st.session_state.chat_history.append({"role": "user", "content": user_question})
                     st.session_state.chat_history.append({"role": "assistant", "content": ai_text})
-
                 except Exception as ai_e:
                     st.error(f"抱歉，AI 助理暫時發生錯誤：{ai_e}")
 
     except Exception as e:
+        st.error(f"發生系統錯誤 : {e}")
         st.error(f"發生系統錯誤 : {e}")
