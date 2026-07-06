@@ -182,31 +182,39 @@ def fetch_ubike_near(lat, lon, headers_dict, radius_km=0.3):
         pass
     return []
 
-# ── 附近公車站：查詢指定座標附近站牌 ──
+# ── 附近公車站：先把全台南站牌快取起來，再用座標篩選 ──
 @st.cache_data(ttl=300)
-def fetch_nearby_bus_stops(lat, lon, headers_dict, radius_km=0.5):
+def fetch_all_bus_stops(access_token):
+    """把全台南站牌一次抓回來並快取，key 用 token 字串避免 dict 無法 hash"""
     url = "https://tdx.transportdata.tw/api/basic/v2/Bus/Stop/City/Tainan?%24format=JSON"
+    headers = {
+        'authorization': f'Bearer {access_token}',
+        'Accept-Encoding': 'gzip'
+    }
     try:
-        res = requests.get(url, headers=headers_dict, timeout=10)
+        res = requests.get(url, headers=headers, timeout=20)
         if res.status_code == 200:
-            stops = res.json()
-            nearby = []
-            seen = set()
-            for stop in stops:
-                pos = stop.get("StopPosition", {})
-                s_lat = pos.get("PositionLat")
-                s_lon = pos.get("PositionLon")
-                name = stop.get("StopName", {}).get("Zh_tw", "")
-                if s_lat and s_lon and name and name not in seen:
-                    dist = haversine(lat, lon, s_lat, s_lon)
-                    if dist <= radius_km:
-                        seen.add(name)
-                        nearby.append({"name": name, "dist": dist})
-            nearby.sort(key=lambda x: x["dist"])
-            return nearby[:15]
-    except:
-        pass
+            return res.json()
+    except Exception as e:
+        st.warning(f"附近站牌 API 錯誤：{e}")
     return []
+
+def find_nearby_stops(all_stops, lat, lon, radius_km=0.5):
+    """從已快取的站牌資料中篩選附近站點"""
+    nearby = []
+    seen = set()
+    for stop in all_stops:
+        pos = stop.get("StopPosition", {})
+        s_lat = pos.get("PositionLat")
+        s_lon = pos.get("PositionLon")
+        name = stop.get("StopName", {}).get("Zh_tw", "")
+        if s_lat and s_lon and name and name not in seen:
+            dist = haversine(lat, lon, s_lat, s_lon)
+            if dist <= radius_km:
+                seen.add(name)
+                nearby.append({"name": name, "dist": dist})
+    nearby.sort(key=lambda x: x["dist"])
+    return nearby[:15]
 
 # ── CSS ──────────────────────────────────────────────────
 TIMELINE_CSS = """
@@ -424,16 +432,25 @@ if __name__ == '__main__':
             # 顯示目前座標
             if st.session_state.user_lat and st.session_state.user_lon:
                 st.success(f"📍 {st.session_state.user_lat:.5f}, {st.session_state.user_lon:.5f}")
-                with st.spinner("搜尋附近站牌中..."):
-                    nearby_stops = fetch_nearby_bus_stops(
-                        st.session_state.user_lat, st.session_state.user_lon, h, radius_km=0.5
+                with st.spinner("載入站牌資料中..."):
+                    # 用 access_token 字串當 cache key（可 hash）
+                    access_token = auth_res.json().get("access_token", "")
+                    all_stops_data = fetch_all_bus_stops(access_token)
+                if all_stops_data:
+                    nearby_stops = find_nearby_stops(
+                        all_stops_data,
+                        st.session_state.user_lat,
+                        st.session_state.user_lon,
+                        radius_km=0.5
                     )
-                if nearby_stops:
-                    st.write(f"**找到 {len(nearby_stops)} 個站牌（500m內）：**")
-                    for ns in nearby_stops:
-                        st.write(f"🚏 **{ns['name']}**（{ns['dist']*1000:.0f}m）")
+                    if nearby_stops:
+                        st.write(f"**找到 {len(nearby_stops)} 個站牌（500m內）：**")
+                        for ns in nearby_stops:
+                            st.write(f"🚏 **{ns['name']}**（{ns['dist']*1000:.0f}m）")
+                    else:
+                        st.warning("附近 500m 內無公車站牌")
                 else:
-                    st.warning("附近 500m 內無公車站牌")
+                    st.error("無法載入站牌資料，請稍後再試")
                 if st.button("🗑️ 清除定位", use_container_width=True):
                     st.session_state.user_lat = None
                     st.session_state.user_lon = None
