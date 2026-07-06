@@ -397,13 +397,7 @@ if __name__ == '__main__':
             st.subheader("📍 附近公車站")
             st.caption("點按鈕自動定位，找出附近站牌")
 
-            # 初始化座標 session_state
-            if "user_lat" not in st.session_state:
-                st.session_state.user_lat = None
-            if "user_lon" not in st.session_state:
-                st.session_state.user_lon = None
-
-            # 從 query_params 讀取 JS 寫入的座標
+            # 從 query_params 讀取座標（優先），沒有才看 session_state
             qp = st.query_params
             if "lat" in qp and "lon" in qp:
                 try:
@@ -411,6 +405,12 @@ if __name__ == '__main__':
                     st.session_state.user_lon = float(qp["lon"])
                 except:
                     pass
+
+            # 初始化（只有在 query_params 也沒有時才設 None）
+            if "user_lat" not in st.session_state:
+                st.session_state.user_lat = None
+            if "user_lon" not in st.session_state:
+                st.session_state.user_lon = None
 
             # JS：取得 GPS 後直接把座標寫進 URL query string，觸發 Streamlit rerun
             gps_html = """
