@@ -27,7 +27,24 @@ ROUTE_CATEGORIES = {
 
 auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token"
 TAINAN_LAT, TAINAN_LON = 22.9997, 120.2270
-UBIKE_SPEED_KMH = 15  # 估算騎車速度
+UBIKE_SPEED_KMH = 15  # 估算騎車速度（OSRM 失敗時備用）
+
+# ── OSRM 免費路由 ─────────────────────────────────────────
+def get_osrm_travel_time(start_lat, start_lon, end_lat, end_lon, mode="bike"):
+    """mode: 'bike' 或 'foot'，回傳 (距離文字, 分鐘數) 或 (None, None)"""
+    try:
+        url = (f"http://router.project-osrm.org/route/v1/{mode}/"
+               f"{start_lon},{start_lat};{end_lon},{end_lat}?overview=false")
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            route = res.json()["routes"][0]
+            dist_m  = route["distance"]
+            dur_min = round(route["duration"] / 60)
+            dist_text = f"{round(dist_m/1000,1)} 公里" if dist_m >= 1000 else f"{round(dist_m)} 公尺"
+            return dist_text, dur_min
+    except:
+        pass
+    return None, None
 
 class Auth():
     def __init__(self, app_id, app_key):
@@ -182,6 +199,70 @@ def new_chat_session():
     st.session_state.current_session_id = sid
     return sid
 
+# ── 進階路線查詢：直達 + 一次轉乘 ───────────────────────────
+@st.cache_data(ttl=3600)
+def build_stop_route_index(token):
+    """
+    建立「站名 → [路線列表]」的索引，用於進階查詢
+    需要先跑過快取才有資料
+    """
+    index = {}  # {站名: [路線名, ...]}
+    try:
+        with open("tainan_stops_cache.json","r",encoding="utf-8") as f:
+            cache = json.load(f)
+        for route_name, stops in cache.items():
+            for stop in stops:
+                if stop not in index:
+                    index[stop] = []
+                if route_name not in index[stop]:
+                    index[stop].append(route_name)
+    except FileNotFoundError:
+        pass
+    return index
+
+def find_direct_routes(stop_index, start_stop, end_stop):
+    """找出同時經過起點和終點的路線（直達）"""
+    start_routes = set(stop_index.get(start_stop, []))
+    end_routes   = set(stop_index.get(end_stop, []))
+    return sorted(start_routes & end_routes)
+
+def find_transfer_routes(stop_index, start_stop, end_stop, max_results=10):
+    """
+    找出一次轉乘方案：
+    起點 → 中繼站（搭路線A）→ 終點（搭路線B）
+    """
+    start_routes = stop_index.get(start_stop, [])
+    end_routes   = stop_index.get(end_stop, [])
+
+    # 起點各路線經過的所有站
+    start_route_stops = {}  # {路線A: set(站名)}
+    for r in start_routes:
+        for stop, routes in stop_index.items():
+            if r in routes:
+                start_route_stops.setdefault(r, set()).add(stop)
+
+    # 終點各路線經過的所有站
+    end_route_stops = {}  # {路線B: set(站名)}
+    for r in end_routes:
+        for stop, routes in stop_index.items():
+            if r in routes:
+                end_route_stops.setdefault(r, set()).add(stop)
+
+    results = []
+    for rA, stopsA in start_route_stops.items():
+        for rB, stopsB in end_route_stops.items():
+            if rA == rB:
+                continue
+            transfer_stops = stopsA & stopsB  # 共同經過的站 = 可轉乘站
+            if transfer_stops:
+                for ts in sorted(transfer_stops)[:3]:  # 每組方案最多列3個轉乘站
+                    results.append({
+                        "routeA": rA, "transfer": ts, "routeB": rB
+                    })
+                    if len(results) >= max_results:
+                        return results
+    return results
+
 # ── UBike 騎車建議 ────────────────────────────────────────
 def check_ubike_suggestion(start_st, end_st, stop_coord_map, ub_stations, ub_avail, bus_wait_sec, bus_travel_sec):
     """
@@ -203,16 +284,20 @@ def check_ubike_suggestion(start_st, end_st, stop_coord_map, ub_stations, ub_ava
     if not start_ub or not end_ub:
         return None
 
-    # 直線距離估算騎車時間
-    dist_km = haversine(s_lat, s_lon, e_lat, e_lon)
-    bike_min = (dist_km / UBIKE_SPEED_KMH) * 60
+    # 用 OSRM 計算實際騎車時間，失敗才用直線估算
+    dist_text, bike_min = get_osrm_travel_time(s_lat, s_lon, e_lat, e_lon, mode="bike")
+    if bike_min is None:
+        dist_km  = haversine(s_lat, s_lon, e_lat, e_lon)
+        bike_min = (dist_km / UBIKE_SPEED_KMH) * 60
+        dist_text = f"{dist_km:.1f} 公里（直線估算）"
+
     bus_total_min = (bus_wait_sec + bus_travel_sec) / 60
 
-    if bike_min < bus_total_min * 0.85:  # 騎車省 15% 以上才推薦
+    if bike_min < bus_total_min * 0.85:
         best_start = start_ub[0]
         best_end   = end_ub[0]
         return (
-            f"🚲 **UBike 更快！** 預估騎車約 {bike_min:.0f} 分鐘，"
+            f"🚲 **UBike 更快！** 實際騎車約 **{bike_min} 分鐘**（{dist_text}），"
             f"比等公車+搭車（約 {bus_total_min:.0f} 分鐘）更省時。\n"
             f"- 起點 UBike：**{best_start['name']}**（可借 {best_start['available']} 輛）\n"
             f"- 終點 UBike：**{best_end['name']}**（可還 {best_end['empty']} 格）"
@@ -353,6 +438,55 @@ if __name__ == '__main__':
                         add_recent_route(r)
                         st.rerun()
                 st.divider()
+
+            # 進階路線查詢
+            with st.expander("🔍 進階查詢（站到站）"):
+                st.caption("輸入起站與終點，找出直達或轉乘一次的路線")
+
+                stop_index = build_stop_route_index(token)
+                all_stop_names = sorted(stop_index.keys()) if stop_index else []
+
+                if not all_stop_names:
+                    st.warning("請先到「系統維護」建立站點快取才能使用進階查詢")
+                else:
+                    adv_start = st.selectbox("出發站", all_stop_names, index=None,
+                        placeholder="請選擇或輸入站名...", key="adv_start")
+                    adv_end   = st.selectbox("目的站", all_stop_names, index=None,
+                        placeholder="請選擇或輸入站名...", key="adv_end")
+
+                    if st.button("🔎 查詢路線", use_container_width=True, key="adv_search"):
+                        if not adv_start or not adv_end:
+                            st.error("請選擇出發站和目的站")
+                        elif adv_start == adv_end:
+                            st.error("出發站和目的站不能相同")
+                        else:
+                            # 直達
+                            directs = find_direct_routes(stop_index, adv_start, adv_end)
+                            if directs:
+                                st.success(f"✅ 直達路線（共 {len(directs)} 條）")
+                                for r in directs:
+                                    col_r, col_b = st.columns([3,2])
+                                    col_r.write(f"🚌 **{r}**")
+                                    if col_b.button("查此路線", key=f"adv_go_{r}"):
+                                        st.session_state.bus_route_select = r
+                                        st.session_state.search_clicked = True
+                                        add_recent_route(r)
+                                        st.rerun()
+                            else:
+                                st.info("無直達路線")
+
+                            # 轉乘一次
+                            st.write("---")
+                            with st.spinner("搜尋轉乘方案中..."):
+                                transfers = find_transfer_routes(stop_index, adv_start, adv_end)
+                            if transfers:
+                                st.warning(f"🔄 轉乘一次方案（共 {len(transfers)} 個）")
+                                for t in transfers:
+                                    st.write(
+                                        f"搭 **{t['routeA']}** → 在 **{t['transfer']}** 轉 **{t['routeB']}**"
+                                    )
+                            else:
+                                st.error("找不到一次轉乘方案，請考慮其他方式")
 
             # 系統維護
             with st.expander("⚙️ 系統維護"):
