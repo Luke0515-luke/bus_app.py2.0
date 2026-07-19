@@ -46,6 +46,195 @@ def get_osrm_travel_time(start_lat, start_lon, end_lat, end_lon, mode="bike"):
         pass
     return None, None
 
+# ── 路線顏色對照 ──────────────────────────────────────────
+ROUTE_COLOR_MAP = {
+    "黃": "#F1C40F",
+    "棕": "#8B4513",
+    "綠": "#27AE60",
+    "橘": "#E67E22",
+    "藍": "#2980B9",
+    "紅": "#E74C3C",
+    "H": "#9B59B6",   # 高鐵快捷
+    "0": "#1ABC9C",
+    "6": "#16A085", "7": "#16A085", "9": "#16A085",
+}
+
+def get_route_color(route_name):
+    for prefix, color in ROUTE_COLOR_MAP.items():
+        if route_name.startswith(prefix):
+            return color
+    return "#7F8C8D"  # 預設灰色
+
+# ── 即時公車位置 API ──────────────────────────────────────
+def fetch_bus_realtime_positions(token, route_name=None):
+    """抓全台南或指定路線的即時公車位置"""
+    headers = {'authorization': f'Bearer {token}', 'Accept-Encoding': 'gzip'}
+    if route_name:
+        url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/RealTimeByFrequency/City/Tainan/{route_name}?%24format=JSON"
+    else:
+        url = "https://tdx.transportdata.tw/api/basic/v2/Bus/RealTimeByFrequency/City/Tainan?%24format=JSON"
+    try:
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            return res.json()
+    except:
+        pass
+    return []
+
+@st.cache_data(ttl=3600)
+def fetch_route_shape(route_name, token):
+    """抓路線的 GPS 軌跡線段（Geometry）"""
+    headers = {'authorization': f'Bearer {token}', 'Accept-Encoding': 'gzip'}
+    url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/Shape/City/Tainan/{route_name}?%24format=JSON"
+    try:
+        res = requests.get(url, headers=headers, timeout=8)
+        if res.status_code == 200:
+            return res.json()
+    except:
+        pass
+    return []
+
+def build_map_page(token, filter_routes=None):
+    """建立公車即時地圖頁面"""
+    import folium
+    from streamlit_folium import st_folium
+
+    st.subheader("🗺️ 台南公車即時位置地圖")
+
+    # 篩選路線輸入
+    col_f, col_r, col_u = st.columns([3, 1, 1])
+    with col_f:
+        route_input = st.text_input(
+            "篩選路線（留空顯示全部，可輸入多條用逗號分隔）",
+            value=", ".join(st.session_state.map_filter_routes),
+            placeholder="例：藍幹線, 綠1, 橘2",
+            key="map_route_input"
+        )
+    with col_r:
+        st.write("")
+        st.write("")
+        if st.button("🔄 更新位置", use_container_width=True):
+            st.session_state.map_last_updated = datetime.now().strftime("%H:%M:%S")
+            st.rerun()
+    with col_u:
+        st.write("")
+        st.write("")
+        if st.button("🏠 回查詢頁", use_container_width=True):
+            st.session_state.current_page = "query"
+            st.rerun()
+
+    # 解析篩選路線
+    if route_input.strip():
+        filter_list = [r.strip() for r in route_input.replace("，",",").split(",") if r.strip()]
+        st.session_state.map_filter_routes = filter_list
+    else:
+        filter_list = []
+        st.session_state.map_filter_routes = []
+
+    if st.session_state.map_last_updated:
+        st.caption(f"上次更新：{st.session_state.map_last_updated}（手動按「更新位置」重新整理）")
+    else:
+        st.caption("按「🔄 更新位置」載入即時資料")
+        st.session_state.map_last_updated = datetime.now().strftime("%H:%M:%S")
+
+    # 建立 Folium 地圖（以台南為中心）
+    m = folium.Map(location=[22.9997, 120.2270], zoom_start=13, tiles="CartoDB dark_matter")
+
+    with st.spinner("載入公車位置中..."):
+        if filter_list:
+            all_buses = []
+            for r in filter_list:
+                all_buses.extend(fetch_bus_realtime_positions(token, r))
+        else:
+            # 全部路線：只抓有快取的路線避免太慢
+            try:
+                with open("tainan_stops_cache.json","r",encoding="utf-8") as f:
+                    cached_routes = list(json.load(f).keys())
+            except:
+                cached_routes = []
+            all_buses = []
+            # 限制最多抓50條路線避免太慢
+            for r in cached_routes[:50]:
+                all_buses.extend(fetch_bus_realtime_positions(token, r))
+
+        # 畫公車位置
+        bus_count = 0
+        added_routes = set()
+        for bus in all_buses:
+            bus_info = bus.get("BusPosition", {})
+            lat = bus_info.get("PositionLat")
+            lon = bus_info.get("PositionLon")
+            route_name = bus.get("RouteName", {}).get("Zh_tw", "")
+            plate = bus.get("PlateNumb", "")
+            direction = "去程" if bus.get("Direction", 0) == 0 else "回程"
+            speed = bus.get("Speed", "?")
+
+            if not lat or not lon:
+                continue
+
+            color = get_route_color(route_name)
+            added_routes.add(route_name)
+
+            # 公車圖示（彩色圓圈）
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=8,
+                color=color,
+                fill=True,
+                fill_color=color,
+                fill_opacity=0.9,
+                popup=folium.Popup(
+                    f"<b>🚌 {route_name}</b><br>"
+                    f"車牌：{plate}<br>"
+                    f"方向：{direction}<br>"
+                    f"速度：{speed} km/h",
+                    max_width=200
+                ),
+                tooltip=f"{route_name} {plate}"
+            ).add_to(m)
+            bus_count += 1
+
+        # 畫路線軌跡（只畫篩選的路線，避免太亂）
+        if filter_list:
+            for r in filter_list:
+                shapes = fetch_route_shape(r, token)
+                color = get_route_color(r)
+                for shape in shapes:
+                    geo = shape.get("Geometry","")
+                    # TDX 回傳的是 WKT 格式: LINESTRING(lon lat, lon lat, ...)
+                    if geo.startswith("LINESTRING"):
+                        try:
+                            coords_str = geo.replace("LINESTRING (","").replace("LINESTRING(","").replace(")","")
+                            points = []
+                            for pair in coords_str.split(","):
+                                parts = pair.strip().split()
+                                if len(parts) >= 2:
+                                    points.append([float(parts[1]), float(parts[0])])
+                            if points:
+                                folium.PolyLine(
+                                    points,
+                                    color=color,
+                                    weight=3,
+                                    opacity=0.7,
+                                    tooltip=r
+                                ).add_to(m)
+                        except:
+                            pass
+
+    # 顯示地圖
+    st_folium(m, width="100%", height=580, returned_objects=[])
+
+    # 統計資訊
+    if bus_count > 0:
+        st.success(f"✅ 共顯示 **{bus_count}** 台公車，涵蓋 **{len(added_routes)}** 條路線")
+        if added_routes:
+            route_list = "、".join(sorted(added_routes)[:20])
+            if len(added_routes) > 20:
+                route_list += f"... 等共 {len(added_routes)} 條"
+            st.caption(f"路線：{route_list}")
+    else:
+        st.warning("目前無即時位置資料，可能是非營運時段或網路問題")
+
 class Auth():
     def __init__(self, app_id, app_key):
         self.app_id = app_id
@@ -73,6 +262,9 @@ def init_session():
         "current_session_id": None,
         "show_chat_history": False,
         "font_large": False,
+        "current_page": "query",
+        "map_last_updated": None,
+        "map_filter_routes": [],
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -380,6 +572,13 @@ if __name__ == '__main__':
                 st.session_state.font_large = not st.session_state.font_large
                 st.rerun()
 
+            # 頁面切換
+            is_map = st.session_state.current_page == "map"
+            map_btn_label = "🚌 回到查詢頁面" if is_map else "🗺️ 公車即時地圖"
+            if st.button(map_btn_label, use_container_width=True):
+                st.session_state.current_page = "map" if not is_map else "query"
+                st.rerun()
+
             st.divider()
 
             # AI 對話記錄
@@ -518,6 +717,12 @@ body, .stMarkdown, .stText, label, .stSelectbox, .stButton button {
 }
 </style>""", unsafe_allow_html=True)
 
+        # ── 地圖頁面 ──────────────────────────────────────
+        if st.session_state.current_page == "map":
+            build_map_page(token)
+            st.stop()
+
+        # ── 查詢頁面 ──────────────────────────────────────
         st.header("🚌 台南公車即時時刻查詢")
 
         left_col, right_col = st.columns([1, 3])
