@@ -94,146 +94,376 @@ def fetch_route_shape(route_name, token):
         pass
     return []
 
-def build_map_page(token, filter_routes=None):
-    """建立公車即時地圖頁面"""
-    import folium
-    from streamlit_folium import st_folium
+def parse_wkt_linestring(geo):
+    """把 TDX WKT LINESTRING 轉成 [[lat,lon],...] 的列表"""
+    points = []
+    try:
+        coords_str = geo.replace("LINESTRING (","").replace("LINESTRING(","").replace(")","")
+        for pair in coords_str.split(","):
+            parts = pair.strip().split()
+            if len(parts) >= 2:
+                points.append([float(parts[1]), float(parts[0])])
+    except:
+        pass
+    return points
+
+def build_map_page(token):
+    """Leaflet.js 純 HTML 地圖，Python 負責抓資料，不閃爍、可篩選、15秒更新"""
 
     st.subheader("🗺️ 台南公車即時位置地圖")
 
-    # 篩選路線輸入
+    # ── 控制列 ──────────────────────────────────────────
     col_f, col_r, col_u = st.columns([3, 1, 1])
     with col_f:
         route_input = st.text_input(
-            "篩選路線（留空顯示全部，可輸入多條用逗號分隔）",
+            "篩選路線（留空=全部，多條用逗號分隔）",
             value=", ".join(st.session_state.map_filter_routes),
             placeholder="例：藍幹線, 綠1, 橘2",
             key="map_route_input"
         )
     with col_r:
-        st.write("")
-        st.write("")
-        if st.button("🔄 更新位置", use_container_width=True):
-            st.session_state.map_last_updated = datetime.now().strftime("%H:%M:%S")
-            st.rerun()
+        st.write(""); st.write("")
+        refresh = st.button("🔄 更新", use_container_width=True)
     with col_u:
-        st.write("")
-        st.write("")
+        st.write(""); st.write("")
         if st.button("🏠 回查詢頁", use_container_width=True):
             st.session_state.current_page = "query"
             st.rerun()
 
-    # 解析篩選路線
+    # 解析篩選清單
     if route_input.strip():
         filter_list = [r.strip() for r in route_input.replace("，",",").split(",") if r.strip()]
-        st.session_state.map_filter_routes = filter_list
     else:
         filter_list = []
-        st.session_state.map_filter_routes = []
+    st.session_state.map_filter_routes = filter_list
 
-    if st.session_state.map_last_updated:
-        st.caption(f"上次更新：{st.session_state.map_last_updated}（手動按「更新位置」重新整理）")
-    else:
-        st.caption("按「🔄 更新位置」載入即時資料")
-        st.session_state.map_last_updated = datetime.now().strftime("%H:%M:%S")
+    now_str = datetime.now().strftime("%H:%M:%S")
+    if refresh or not st.session_state.map_last_updated:
+        st.session_state.map_last_updated = now_str
 
-    # 建立 Folium 地圖（以台南為中心）
-    m = folium.Map(location=[22.9997, 120.2270], zoom_start=13, tiles="CartoDB dark_matter")
+    st.caption(f"資料時間：{st.session_state.map_last_updated}　｜　每次按「🔄 更新」重抓最新位置")
 
-    with st.spinner("載入公車位置中..."):
+    # ── 抓公車即時位置 ───────────────────────────────────
+    with st.spinner("抓取公車位置中..."):
         if filter_list:
             all_buses = []
             for r in filter_list:
                 all_buses.extend(fetch_bus_realtime_positions(token, r))
         else:
-            # 全部路線：只抓有快取的路線避免太慢
             try:
                 with open("tainan_stops_cache.json","r",encoding="utf-8") as f:
                     cached_routes = list(json.load(f).keys())
             except:
                 cached_routes = []
             all_buses = []
-            # 限制最多抓50條路線避免太慢
-            for r in cached_routes[:50]:
+            for r in cached_routes[:60]:
                 all_buses.extend(fetch_bus_realtime_positions(token, r))
 
-        # 畫公車位置
-        bus_count = 0
-        added_routes = set()
-        for bus in all_buses:
-            bus_info = bus.get("BusPosition", {})
-            lat = bus_info.get("PositionLat")
-            lon = bus_info.get("PositionLon")
-            route_name = bus.get("RouteName", {}).get("Zh_tw", "")
-            plate = bus.get("PlateNumb", "")
-            direction = "去程" if bus.get("Direction", 0) == 0 else "回程"
-            speed = bus.get("Speed", "?")
+    # ── 整理公車資料 → JSON ──────────────────────────────
+    bus_features = []
+    route_set = set()
+    for bus in all_buses:
+        pos   = bus.get("BusPosition", {})
+        lat   = pos.get("PositionLat")
+        lon   = pos.get("PositionLon")
+        route = bus.get("RouteName", {}).get("Zh_tw", "")
+        plate = bus.get("PlateNumb", "")
+        direc = "去程" if bus.get("Direction", 0) == 0 else "回程"
+        speed = bus.get("Speed", "?")
+        if not lat or not lon or not route:
+            continue
+        color = get_route_color(route)
+        route_set.add(route)
+        bus_features.append({
+            "lat": lat, "lon": lon,
+            "route": route, "plate": plate,
+            "dir": direc, "speed": speed,
+            "color": color
+        })
 
-            if not lat or not lon:
-                continue
+    # ── 抓路線軌跡 → JSON ───────────────────────────────
+    shape_features = []
+    routes_to_draw = filter_list if filter_list else sorted(route_set)[:30]
+    with st.spinner("載入路線軌跡中..."):
+        for r in routes_to_draw:
+            color  = get_route_color(r)
+            shapes = fetch_route_shape(r, token)
+            for sh in shapes:
+                pts = parse_wkt_linestring(sh.get("Geometry",""))
+                if pts:
+                    shape_features.append({"route": r, "color": color, "points": pts})
 
-            color = get_route_color(route_name)
-            added_routes.add(route_name)
+    # ── 路線清單（左側面板用）───────────────────────────
+    all_routes_sorted = sorted(route_set)
 
-            # 公車圖示（彩色圓圈）
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=8,
-                color=color,
-                fill=True,
-                fill_color=color,
-                fill_opacity=0.9,
-                popup=folium.Popup(
-                    f"<b>🚌 {route_name}</b><br>"
-                    f"車牌：{plate}<br>"
-                    f"方向：{direction}<br>"
-                    f"速度：{speed} km/h",
-                    max_width=200
-                ),
-                tooltip=f"{route_name} {plate}"
-            ).add_to(m)
-            bus_count += 1
+    # 序列化成 JS 變數
+    bus_json   = json.dumps(bus_features,   ensure_ascii=False)
+    shape_json = json.dumps(shape_features, ensure_ascii=False)
+    routes_json= json.dumps(all_routes_sorted, ensure_ascii=False)
 
-        # 畫路線軌跡（只畫篩選的路線，避免太亂）
-        if filter_list:
-            for r in filter_list:
-                shapes = fetch_route_shape(r, token)
-                color = get_route_color(r)
-                for shape in shapes:
-                    geo = shape.get("Geometry","")
-                    # TDX 回傳的是 WKT 格式: LINESTRING(lon lat, lon lat, ...)
-                    if geo.startswith("LINESTRING"):
-                        try:
-                            coords_str = geo.replace("LINESTRING (","").replace("LINESTRING(","").replace(")","")
-                            points = []
-                            for pair in coords_str.split(","):
-                                parts = pair.strip().split()
-                                if len(parts) >= 2:
-                                    points.append([float(parts[1]), float(parts[0])])
-                            if points:
-                                folium.PolyLine(
-                                    points,
-                                    color=color,
-                                    weight=3,
-                                    opacity=0.7,
-                                    tooltip=r
-                                ).add_to(m)
-                        except:
-                            pass
+    # ── 建立 Leaflet HTML ────────────────────────────────
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Noto Sans TC', sans-serif; }}
+  body {{ display: flex; height: 100vh; overflow: hidden; background: #1a1a2e; }}
 
-    # 顯示地圖
-    st_folium(m, width="100%", height=580, returned_objects=[])
+  /* 左側面板 */
+  #panel {{
+    width: 220px; min-width: 220px;
+    background: #16213e;
+    color: #eee;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid #0f3460;
+  }}
+  #panel-header {{
+    padding: 12px;
+    background: #0f3460;
+    font-weight: bold;
+    font-size: 14px;
+    color: #fff;
+  }}
+  #panel-stats {{
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #aaa;
+    border-bottom: 1px solid #0f3460;
+  }}
+  #search-box {{
+    margin: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #0f3460;
+    background: #1a1a2e;
+    color: #eee;
+    font-size: 12px;
+    width: calc(100% - 16px);
+  }}
+  #route-list {{
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }}
+  .route-item {{
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid #0f3460;
+    transition: background 0.15s;
+  }}
+  .route-item:hover {{ background: #0f3460; }}
+  .route-item.active {{ background: #0f3460; }}
+  .route-dot {{
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    flex-shrink: 0;
+    border: 2px solid rgba(255,255,255,0.3);
+  }}
+  .route-count {{
+    margin-left: auto;
+    font-size: 11px;
+    color: #888;
+    background: #0f3460;
+    padding: 1px 5px;
+    border-radius: 8px;
+  }}
 
-    # 統計資訊
-    if bus_count > 0:
-        st.success(f"✅ 共顯示 **{bus_count}** 台公車，涵蓋 **{len(added_routes)}** 條路線")
-        if added_routes:
-            route_list = "、".join(sorted(added_routes)[:20])
-            if len(added_routes) > 20:
-                route_list += f"... 等共 {len(added_routes)} 條"
-            st.caption(f"路線：{route_list}")
+  /* 地圖 */
+  #map {{ flex: 1; }}
+
+  /* 彈出資訊卡 */
+  .bus-popup b {{ font-size: 15px; color: #333; }}
+  .bus-popup .tag {{
+    display: inline-block;
+    padding: 2px 6px; border-radius: 4px;
+    font-size: 11px; color: white;
+    margin-top: 4px; margin-right: 2px;
+  }}
+  .leaflet-popup-content {{ min-width: 160px; }}
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <div id="panel-header">🚌 台南公車即時地圖</div>
+  <div id="panel-stats" id="stats">載入中...</div>
+  <input id="search-box" type="text" placeholder="搜尋路線..." oninput="filterPanel(this.value)"/>
+  <div id="route-list"></div>
+</div>
+
+<div id="map"></div>
+
+<script>
+// ── 資料（由 Python 注入）──────────────────────────
+const BUS_DATA    = {bus_json};
+const SHAPE_DATA  = {shape_json};
+const ALL_ROUTES  = {routes_json};
+
+// ── 初始化地圖 ─────────────────────────────────────
+const map = L.map('map', {{ zoomControl: true }}).setView([22.9997, 120.2270], 13);
+
+L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+  attribution: '© OpenStreetMap © CARTO',
+  subdomains: 'abcd',
+  maxZoom: 19
+}}).addTo(map);
+
+// ── 狀態 ───────────────────────────────────────────
+let activeRoutes = new Set(ALL_ROUTES);  // 預設全部顯示
+let busMarkers   = L.layerGroup().addTo(map);
+let shapeLines   = L.layerGroup().addTo(map);
+
+// ── 畫路線軌跡 ─────────────────────────────────────
+function drawShapes() {{
+  shapeLines.clearLayers();
+  SHAPE_DATA.forEach(sh => {{
+    if (!activeRoutes.has(sh.route)) return;
+    const latlngs = sh.points.map(p => [p[0], p[1]]);
+    L.polyline(latlngs, {{
+      color: sh.color,
+      weight: 3,
+      opacity: 0.75
+    }}).bindTooltip(sh.route, {{sticky: true}}).addTo(shapeLines);
+  }});
+}}
+
+// ── 畫公車標記 ─────────────────────────────────────
+function makeBusIcon(color) {{
+  return L.divIcon({{
+    className: '',
+    html: `<div style="
+      width:18px; height:18px;
+      background:${{color}};
+      border:2.5px solid rgba(255,255,255,0.85);
+      border-radius:50%;
+      box-shadow: 0 0 6px ${{color}};
+    "></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9]
+  }});
+}}
+
+// 統計每條路線的車輛數
+function countByRoute() {{
+  const cnt = {{}};
+  BUS_DATA.forEach(b => {{
+    if (activeRoutes.has(b.route))
+      cnt[b.route] = (cnt[b.route] || 0) + 1;
+  }});
+  return cnt;
+}}
+
+function drawBuses() {{
+  busMarkers.clearLayers();
+  let total = 0;
+  BUS_DATA.forEach(b => {{
+    if (!activeRoutes.has(b.route)) return;
+    const marker = L.marker([b.lat, b.lon], {{ icon: makeBusIcon(b.color) }});
+    marker.bindPopup(`
+      <div class="bus-popup">
+        <b>🚌 ${{b.route}}</b><br>
+        <span class="tag" style="background:${{b.color}}">車牌：${{b.plate}}</span>
+        <span class="tag" style="background:#555">方向：${{b.dir}}</span>
+        <span class="tag" style="background:#333">速度：${{b.speed}} km/h</span>
+      </div>
+    `, {{ maxWidth: 200 }});
+    marker.addTo(busMarkers);
+    total++;
+  }});
+
+  // 更新統計
+  const shown = activeRoutes.size;
+  document.getElementById('panel-stats').textContent =
+    `顯示 ${{shown}} 條路線・${{total}} 台公車`;
+}}
+
+// ── 左側路線面板 ───────────────────────────────────
+function buildPanel(filterText) {{
+  const list = document.getElementById('route-list');
+  list.innerHTML = '';
+  const cnt = countByRoute();
+
+  // 全選/取消
+  const allItem = document.createElement('div');
+  const allActive = activeRoutes.size === ALL_ROUTES.length;
+  allItem.className = 'route-item' + (allActive ? ' active' : '');
+  allItem.innerHTML = `
+    <div class="route-dot" style="background:#fff;"></div>
+    <span>全部路線</span>
+    <span class="route-count">${{ALL_ROUTES.length}}</span>
+  `;
+  allItem.onclick = () => {{
+    if (activeRoutes.size === ALL_ROUTES.length)
+      activeRoutes.clear();
+    else
+      ALL_ROUTES.forEach(r => activeRoutes.add(r));
+    buildPanel(filterText);
+    drawShapes(); drawBuses();
+  }};
+  list.appendChild(allItem);
+
+  ALL_ROUTES.forEach(route => {{
+    if (filterText && !route.includes(filterText)) return;
+    const color = getRouteColor(route);
+    const n = cnt[route] || 0;
+    const item = document.createElement('div');
+    item.className = 'route-item' + (activeRoutes.has(route) ? ' active' : '');
+    item.innerHTML = `
+      <div class="route-dot" style="background:${{color}};"></div>
+      <span>${{route}}</span>
+      <span class="route-count">${{n}}</span>
+    `;
+    item.onclick = () => {{
+      if (activeRoutes.has(route)) activeRoutes.delete(route);
+      else activeRoutes.add(route);
+      item.classList.toggle('active');
+      drawShapes(); drawBuses();
+      buildPanel(filterText);
+    }};
+    list.appendChild(item);
+  }});
+}}
+
+function filterPanel(text) {{
+  buildPanel(text);
+}}
+
+// ── 路線顏色（與 Python 同步）──────────────────────
+function getRouteColor(name) {{
+  const map = {{
+    '黃':'#F1C40F','棕':'#8B4513','綠':'#27AE60',
+    '橘':'#E67E22','藍':'#2980B9','紅':'#E74C3C',
+    'H':'#9B59B6','0':'#1ABC9C',
+  }};
+  for (const [prefix, color] of Object.entries(map)) {{
+    if (name.startsWith(prefix)) return color;
+  }}
+  return '#7F8C8D';
+}}
+
+// ── 初始化 ─────────────────────────────────────────
+drawShapes();
+drawBuses();
+buildPanel('');
+</script>
+</body>
+</html>
+"""
+    st.components.v1.html(html, height=680, scrolling=False)
+
+    if bus_features:
+        st.success(f"✅ 共 {len(bus_features)} 台公車・{len(route_set)} 條路線")
     else:
-        st.warning("目前無即時位置資料，可能是非營運時段或網路問題")
+        st.warning("目前無即時位置資料（可能是非營運時段）")
 
 class Auth():
     def __init__(self, app_id, app_key):
@@ -686,6 +916,108 @@ if __name__ == '__main__':
                                     )
                             else:
                                 st.error("找不到一次轉乘方案，請考慮其他方式")
+
+            # 客運查詢
+            with st.expander("🚍 客運查詢"):
+                st.caption("查詢台南往返各地的客運班次")
+
+                # 常見客運業者與路線
+                INTERCITY_OPERATORS = {
+                    "統聯客運": "UniUbus",
+                    "國光客運": "Kuo-Kuang",
+                    "和欣客運": "HoHsin",
+                    "阿羅哈客運": "Aloha",
+                    "嘉義客運": "ChiayiBus",
+                    "台南客運": "TainanBus",
+                }
+
+                # 查詢公總跨縣市路線（TDX InterCity API）
+                @st.cache_data(ttl=300)
+                def fetch_intercity_routes(keyword, token):
+                    headers = {'authorization': f'Bearer {token}', 'Accept-Encoding': 'gzip'}
+                    url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/Route/InterCity?%24filter=contains(RouteName/Zh_tw%2C'{keyword}')&%24format=JSON"
+                    try:
+                        res = requests.get(url, headers=headers, timeout=8)
+                        if res.status_code == 200:
+                            return res.json()
+                    except:
+                        pass
+                    return []
+
+                @st.cache_data(ttl=60)
+                def fetch_intercity_eta(route_id, token):
+                    headers = {'authorization': f'Bearer {token}', 'Accept-Encoding': 'gzip'}
+                    url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/InterCity/{route_id}?%24format=JSON"
+                    try:
+                        res = requests.get(url, headers=headers, timeout=8)
+                        if res.status_code == 200:
+                            return res.json()
+                    except:
+                        pass
+                    return []
+
+                @st.cache_data(ttl=3600)
+                def fetch_intercity_stops(route_id, token):
+                    headers = {'authorization': f'Bearer {token}', 'Accept-Encoding': 'gzip'}
+                    url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/InterCity/{route_id}?%24format=JSON"
+                    try:
+                        res = requests.get(url, headers=headers, timeout=8)
+                        if res.status_code == 200:
+                            return res.json()
+                    except:
+                        pass
+                    return []
+
+                # 查詢介面
+                ic_keyword = st.text_input(
+                    "輸入起點或目的地",
+                    placeholder="例：台南、嘉義、高雄、台北",
+                    key="ic_keyword"
+                )
+
+                if st.button("🔎 搜尋客運路線", use_container_width=True, key="ic_search"):
+                    if not ic_keyword.strip():
+                        st.warning("請輸入關鍵字")
+                    else:
+                        with st.spinner("搜尋中..."):
+                            routes = fetch_intercity_routes(ic_keyword.strip(), token)
+                        if routes:
+                            st.success(f"找到 {len(routes)} 條路線")
+                            for r in routes[:15]:
+                                rname  = r.get("RouteName",{}).get("Zh_tw","")
+                                rid    = r.get("RouteUID","")
+                                op     = r.get("OperatorName","")
+                                dep    = r.get("DepartureStopNameZh","")
+                                dest   = r.get("DestinationStopNameZh","")
+                                with st.expander(f"🚍 {rname}（{dep} → {dest}）"):
+                                    st.caption(f"業者：{op}　路線ID：{rid}")
+                                    # 抓停靠站
+                                    stops_data = fetch_intercity_stops(rid, token)
+                                    eta_data   = fetch_intercity_eta(rid, token)
+                                    eta_map = {}
+                                    for e in eta_data:
+                                        sname = e.get("StopName",{}).get("Zh_tw","")
+                                        eta_s = e.get("EstimateTime")
+                                        status = e.get("StopStatus", 1)
+                                        eta_map[sname] = (eta_s, status)
+
+                                    if stops_data:
+                                        for dir_data in stops_data[:1]:  # 只顯示去程
+                                            stops = dir_data.get("Stops",[])
+                                            for s in stops:
+                                                sname = s.get("StopName",{}).get("Zh_tw","")
+                                                eta_s, status = eta_map.get(sname, (None, 1))
+                                                if eta_s is not None and status == 0:
+                                                    t = f"{eta_s//60} 分鐘" if eta_s > 120 else "即將進站"
+                                                    st.write(f"🟢 **{sname}** — {t}")
+                                                elif status == 3:
+                                                    st.write(f"⚫ {sname} — 末班車已過")
+                                                else:
+                                                    st.write(f"⚪ {sname} — 尚未發車")
+                                    else:
+                                        st.info("無站點資料")
+                        else:
+                            st.warning("找不到相關路線，請換個關鍵字試試")
 
             # 系統維護
             with st.expander("⚙️ 系統維護"):
