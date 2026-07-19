@@ -48,22 +48,26 @@ def get_osrm_travel_time(start_lat, start_lon, end_lat, end_lon, mode="bike"):
 
 # ── 路線顏色對照 ──────────────────────────────────────────
 ROUTE_COLOR_MAP = {
-    "黃": "#F1C40F",
-    "棕": "#8B4513",
-    "綠": "#27AE60",
-    "橘": "#E67E22",
-    "藍": "#2980B9",
-    "紅": "#E74C3C",
-    "H": "#9B59B6",   # 高鐵快捷
-    "0": "#1ABC9C",
-    "6": "#16A085", "7": "#16A085", "9": "#16A085",
+    "黃":"#F1C40F","棕":"#8B4513","綠":"#27AE60","橘":"#E67E22",
+    "藍":"#2980B9","紅":"#E74C3C","H":"#9B59B6",
+    "0":"#1ABC9C",
+    "6":"#E91E63","7":"#E91E63","9":"#E91E63",
+    "10":"#FF5722","11":"#FF5722","14":"#FF5722","15":"#FF5722",
+    "18":"#FF9800","19":"#FF9800","20":"#FF9800","21":"#FF9800",
+    "31":"#795548","32":"#795548","33":"#795548",
+    "62":"#607D8B","70":"#3F51B5","77":"#009688","98":"#F44336",
+    "101":"#673AB7","102":"#673AB7","103":"#673AB7","107":"#673AB7",
+    "111":"#00BCD4","168":"#00BCD4",
+    "901":"#8BC34A","902":"#8BC34A","904":"#8BC34A","905":"#8BC34A",
+    "東山":"#FF6F00","梅嶺":"#AD1457","菱波":"#00838F","雙層":"#BF360C",
 }
 
 def get_route_color(route_name):
-    for prefix, color in ROUTE_COLOR_MAP.items():
+    # 長前綴優先，避免 "10" 被 "1" 誤匹配
+    for prefix in sorted(ROUTE_COLOR_MAP.keys(), key=len, reverse=True):
         if route_name.startswith(prefix):
-            return color
-    return "#7F8C8D"  # 預設灰色
+            return ROUTE_COLOR_MAP[prefix]
+    return "#7F8C8D"
 
 # ── 即時公車位置 API ──────────────────────────────────────
 def fetch_bus_realtime_positions(token, route_name=None):
@@ -437,14 +441,24 @@ function filterPanel(text) {{
   buildPanel(text);
 }}
 
-// ── 路線顏色（與 Python 同步）──────────────────────
+// ── 路線顏色（與 Python 同步，長前綴優先）────────
 function getRouteColor(name) {{
-  const map = {{
-    '黃':'#F1C40F','棕':'#8B4513','綠':'#27AE60',
-    '橘':'#E67E22','藍':'#2980B9','紅':'#E74C3C',
-    'H':'#9B59B6','0':'#1ABC9C',
-  }};
-  for (const [prefix, color] of Object.entries(map)) {{
+  const colorMap = [
+    ['黃','#F1C40F'],['棕','#8B4513'],['綠','#27AE60'],['橘','#E67E22'],
+    ['藍','#2980B9'],['紅','#E74C3C'],['H','#9B59B6'],
+    ['0','#1ABC9C'],
+    ['101','#673AB7'],['102','#673AB7'],['103','#673AB7'],['107','#673AB7'],
+    ['111','#00BCD4'],['168','#00BCD4'],
+    ['10','#FF5722'],['11','#FF5722'],['14','#FF5722'],['15','#FF5722'],
+    ['18','#FF9800'],['19','#FF9800'],['20','#FF9800'],['21','#FF9800'],
+    ['31','#795548'],['32','#795548'],['33','#795548'],
+    ['62','#607D8B'],['70','#3F51B5'],['77','#009688'],['98','#F44336'],
+    ['901','#8BC34A'],['902','#8BC34A'],['904','#8BC34A'],['905','#8BC34A'],
+    ['6','#E91E63'],['7','#E91E63'],['9','#E91E63'],
+    ['東山','#FF6F00'],['梅嶺','#AD1457'],['菱波','#00838F'],['雙層','#BF360C'],
+  ];
+  // 陣列已按長前綴優先排列
+  for (const [prefix, color] of colorMap) {{
     if (name.startsWith(prefix)) return color;
   }}
   return '#7F8C8D';
@@ -919,25 +933,16 @@ if __name__ == '__main__':
 
             # 客運查詢
             with st.expander("🚍 客運查詢"):
-                st.caption("查詢台南往返各地的客運班次")
+                st.caption("選擇業者與起訖站查詢班次")
 
-                # 常見客運業者與路線
-                INTERCITY_OPERATORS = {
-                    "統聯客運": "UniUbus",
-                    "國光客運": "Kuo-Kuang",
-                    "和欣客運": "HoHsin",
-                    "阿羅哈客運": "Aloha",
-                    "嘉義客運": "ChiayiBus",
-                    "台南客運": "TainanBus",
-                }
-
-                # 查詢公總跨縣市路線（TDX InterCity API）
-                @st.cache_data(ttl=300)
-                def fetch_intercity_routes(keyword, token):
+                # ── 客運 API 函數 ─────────────────────────
+                @st.cache_data(ttl=3600)
+                def fetch_intercity_routes_by_op(op_id, token):
                     headers = {'authorization': f'Bearer {token}', 'Accept-Encoding': 'gzip'}
-                    url = f"https://tdx.transportdata.tw/api/basic/v2/Bus/Route/InterCity?%24filter=contains(RouteName/Zh_tw%2C'{keyword}')&%24format=JSON"
+                    url = (f"https://tdx.transportdata.tw/api/basic/v2/Bus/Route/InterCity"
+                           f"?%24filter=OperatorIDs/any(o:o%20eq%20'{op_id}')&%24format=JSON")
                     try:
-                        res = requests.get(url, headers=headers, timeout=8)
+                        res = requests.get(url, headers=headers, timeout=10)
                         if res.status_code == 200:
                             return res.json()
                     except:
@@ -968,56 +973,98 @@ if __name__ == '__main__':
                         pass
                     return []
 
-                # 查詢介面
-                ic_keyword = st.text_input(
-                    "輸入起點或目的地",
-                    placeholder="例：台南、嘉義、高雄、台北",
-                    key="ic_keyword"
+                # ── 業者選單 ──────────────────────────────
+                INTERCITY_OPERATORS = {
+                    "（請選擇）": None,
+                    "統聯客運": "851",
+                    "國光客運": "805",
+                    "和欣客運": "822",
+                    "阿羅哈客運": "826",
+                    "嘉義客運": "602",
+                    "台南客運": "646",
+                    "興南客運": "647",
+                    "新營客運": "648",
+                    "豐原客運": "717",
+                    "中壢客運": "719",
+                }
+
+                op_name = st.selectbox(
+                    "選擇客運業者",
+                    list(INTERCITY_OPERATORS.keys()),
+                    key="ic_operator"
                 )
+                op_id = INTERCITY_OPERATORS.get(op_name)
 
-                if st.button("🔎 搜尋客運路線", use_container_width=True, key="ic_search"):
-                    if not ic_keyword.strip():
-                        st.warning("請輸入關鍵字")
-                    else:
-                        with st.spinner("搜尋中..."):
-                            routes = fetch_intercity_routes(ic_keyword.strip(), token)
-                        if routes:
-                            st.success(f"找到 {len(routes)} 條路線")
-                            for r in routes[:15]:
-                                rname  = r.get("RouteName",{}).get("Zh_tw","")
-                                rid    = r.get("RouteUID","")
-                                op     = r.get("OperatorName","")
-                                dep    = r.get("DepartureStopNameZh","")
-                                dest   = r.get("DestinationStopNameZh","")
-                                with st.expander(f"🚍 {rname}（{dep} → {dest}）"):
-                                    st.caption(f"業者：{op}　路線ID：{rid}")
-                                    # 抓停靠站
-                                    stops_data = fetch_intercity_stops(rid, token)
-                                    eta_data   = fetch_intercity_eta(rid, token)
-                                    eta_map = {}
-                                    for e in eta_data:
-                                        sname = e.get("StopName",{}).get("Zh_tw","")
-                                        eta_s = e.get("EstimateTime")
-                                        status = e.get("StopStatus", 1)
-                                        eta_map[sname] = (eta_s, status)
+                if op_id:
+                    with st.spinner(f"載入 {op_name} 路線中..."):
+                        ic_routes = fetch_intercity_routes_by_op(op_id, token)
 
-                                    if stops_data:
-                                        for dir_data in stops_data[:1]:  # 只顯示去程
-                                            stops = dir_data.get("Stops",[])
-                                            for s in stops:
-                                                sname = s.get("StopName",{}).get("Zh_tw","")
-                                                eta_s, status = eta_map.get(sname, (None, 1))
-                                                if eta_s is not None and status == 0:
-                                                    t = f"{eta_s//60} 分鐘" if eta_s > 120 else "即將進站"
-                                                    st.write(f"🟢 **{sname}** — {t}")
-                                                elif status == 3:
-                                                    st.write(f"⚫ {sname} — 末班車已過")
-                                                else:
-                                                    st.write(f"⚪ {sname} — 尚未發車")
-                                    else:
-                                        st.info("無站點資料")
+                    if ic_routes:
+                        # 建立「起點→終點」選單
+                        route_options = {}
+                        for r in ic_routes:
+                            dep  = r.get("DepartureStopNameZh","")
+                            dest = r.get("DestinationStopNameZh","")
+                            rname= r.get("RouteName",{}).get("Zh_tw","")
+                            rid  = r.get("RouteUID","")
+                            label= f"{dep} → {dest}（{rname}）"
+                            route_options[label] = rid
+
+                        ic_dep = st.text_input(
+                            "起點站（含關鍵字即可）",
+                            placeholder="例：台南、嘉義",
+                            key="ic_dep"
+                        )
+                        ic_dest = st.text_input(
+                            "目的站（含關鍵字即可）",
+                            placeholder="例：台北、高雄",
+                            key="ic_dest"
+                        )
+
+                        # 過濾符合的路線
+                        matched = {
+                            label: rid for label, rid in route_options.items()
+                            if (not ic_dep  or ic_dep  in label)
+                            and (not ic_dest or ic_dest in label)
+                        }
+
+                        if ic_dep or ic_dest:
+                            if matched:
+                                st.success(f"找到 {len(matched)} 條符合路線")
+                                for label, rid in list(matched.items())[:10]:
+                                    with st.expander(f"🚍 {label}"):
+                                        stops_data = fetch_intercity_stops(rid, token)
+                                        eta_data   = fetch_intercity_eta(rid, token)
+                                        eta_map = {}
+                                        for e in eta_data:
+                                            sn = e.get("StopName",{}).get("Zh_tw","")
+                                            eta_map[sn] = (
+                                                e.get("EstimateTime"),
+                                                e.get("StopStatus",1)
+                                            )
+                                        if stops_data:
+                                            st.write("**停靠站與到站時間：**")
+                                            for dir_data in stops_data[:1]:
+                                                for s in dir_data.get("Stops",[]):
+                                                    sn = s.get("StopName",{}).get("Zh_tw","")
+                                                    eta_s, status = eta_map.get(sn,(None,1))
+                                                    if eta_s is not None and status == 0:
+                                                        t = "即將進站" if eta_s <= 120 else f"{eta_s//60} 分鐘"
+                                                        st.write(f"🟢 **{sn}** — {t}")
+                                                    elif status == 3:
+                                                        st.write(f"⚫ {sn} — 末班車已過")
+                                                    elif status == 4:
+                                                        st.write(f"🔴 {sn} — 今日停駛")
+                                                    else:
+                                                        st.write(f"⚪ {sn} — 尚未發車")
+                                        else:
+                                            st.info("無站點資料")
+                            else:
+                                st.warning("找不到符合的路線，請調整關鍵字")
                         else:
-                            st.warning("找不到相關路線，請換個關鍵字試試")
+                            st.info(f"{op_name} 共有 {len(ic_routes)} 條路線，請輸入起點或目的站篩選")
+                    else:
+                        st.warning(f"目前查不到 {op_name} 的路線資料")
 
             # 系統維護
             with st.expander("⚙️ 系統維護"):
