@@ -1,4 +1,5 @@
-groq
-streamlit>=1.57.0
+streamlit
 requests
-pandas
+groq
+folium
+streamlit-folium
